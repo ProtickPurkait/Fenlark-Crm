@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -591,51 +592,84 @@ function AssignMenu({
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // Where to portal the menu to, in viewport coordinates — recomputed each
+  // time it opens. The bulk-action bar it lives in needs `overflow-hidden`
+  // for its own height grow-in animation, which would silently clip a plain
+  // `position: absolute` dropdown no matter its z-index (overflow clipping
+  // happens before stacking order is even considered). Portaling to <body>
+  // sidesteps that the same way Radix's Select/Dialog already do elsewhere
+  // in this app.
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const options = useMemo(() => telecallers, [telecallers]);
+
+  useEffect(() => setMounted(true), []);
+
+  function openMenu() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setCoords({ top: rect.bottom + 6, left: rect.left });
+    setOpen(true);
+  }
+
+  // A stale position is worse than no menu — close rather than let it float
+  // over the wrong spot once the trigger has scrolled away underneath it.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    return () => window.removeEventListener("scroll", close, true);
+  }, [open]);
 
   return (
     <div className="relative">
       <MotionButton
+        ref={triggerRef}
         variant="glass"
         size="sm"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? setOpen(false) : openMenu())}
         disabled={disabled || options.length === 0}
       >
         <UserCheck className="h-3.5 w-3.5" />
         Assign to…
       </MotionButton>
-      <AnimatePresence>
-        {open && (
-          <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setOpen(false)}
-              aria-hidden
-            />
-            <motion.div
-              initial={{ opacity: 0, y: -4, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.98 }}
-              transition={springSoft}
-              className="glass-strong absolute left-0 top-full z-50 mt-1.5 max-h-64 w-52 overflow-auto rounded-xl p-1 scrollbar-slim"
-            >
-              {options.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    onAssign(t.id);
-                  }}
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {open && coords && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setOpen(false)}
+                  aria-hidden
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={springSoft}
+                  style={{ top: coords.top, left: coords.left }}
+                  className="glass-strong fixed z-50 max-h-64 w-52 overflow-auto rounded-xl p-1 scrollbar-slim"
                 >
-                  {t.full_name}
-                </button>
-              ))}
-            </motion.div>
-          </>
+                  {options.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        onAssign(t.id);
+                      }}
+                      className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
+                    >
+                      {t.full_name}
+                    </button>
+                  ))}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
         )}
-      </AnimatePresence>
     </div>
   );
 }
