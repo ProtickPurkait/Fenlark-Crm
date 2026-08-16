@@ -234,10 +234,21 @@ export function CallDispositionDrawer({
                 </SheetTitle>
                 <LeadStatusBadge status={lead.status} className="shrink-0" />
               </div>
+              {/* Business type before phone/city — this is the one piece of
+                  context that tells the telecaller what they're about to
+                  walk into on the call. */}
+              {lead.business_type && (
+                <span className="mt-1 inline-block w-fit rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                  {lead.business_type}
+                </span>
+              )}
               <SheetDescription className="font-mono text-xs">
                 {lead.phone}
                 {lead.city ? ` · ${lead.city}` : ""}
               </SheetDescription>
+              {lead.address && (
+                <p className="mt-0.5 text-xs text-muted-foreground">{lead.address}</p>
+              )}
             </SheetHeader>
 
             {/* SLA countdown — only while the lead is still untouched, since

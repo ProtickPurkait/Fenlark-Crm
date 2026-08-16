@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Wallet } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
 import { LeadStatusBadge } from "@/components/shared/lead-status-badge";
 import { FollowUpBadge } from "@/components/shared/follow-up-badge";
+import { SaleStatusBadge } from "@/components/shared/sale-status-badge";
 import { CallDispositionDrawer } from "@/components/caller/call-disposition-drawer";
+import { LogSaleSheet } from "@/components/caller/log-sale-sheet";
 import { buildWhatsAppLink } from "@/lib/phone";
 import {
   springSoft,
@@ -15,7 +17,7 @@ import {
   staggerTile,
 } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import type { LeadQueueRow } from "@/lib/supabase/database.types";
+import type { LeadQueueRow, SaleStatus } from "@/lib/supabase/database.types";
 
 interface DashboardStats {
   calls_made_today: number;
@@ -30,6 +32,7 @@ interface CallerQueueClientProps {
   whatsappTemplate: string;
   agentName: string;
   initialStats: DashboardStats | null;
+  initialSaleStatusByLead: Record<string, SaleStatus>;
 }
 
 export function CallerQueueClient({
@@ -37,11 +40,15 @@ export function CallerQueueClient({
   whatsappTemplate,
   agentName,
   initialStats,
+  initialSaleStatusByLead,
 }: CallerQueueClientProps) {
   const [leads, setLeads] = useState(initialLeads);
   const [stats, setStats] = useState(initialStats);
+  const [saleStatusByLead, setSaleStatusByLead] = useState(initialSaleStatusByLead);
   const [selected, setSelected] = useState<LeadQueueRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [saleLead, setSaleLead] = useState<LeadQueueRow | null>(null);
+  const [saleSheetOpen, setSaleSheetOpen] = useState(false);
 
   // Same rationale as login: Supabase is the heaviest chunk this app ships,
   // and nothing on first paint needs it — only a refetch, a call, a save, or
@@ -55,16 +62,20 @@ export function CallerQueueClient({
   async function refetch() {
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
-    const [{ data: freshLeads }, { data: freshStats }] = await Promise.all([
+    const [{ data: freshLeads }, { data: freshStats }, { data: freshSales }] = await Promise.all([
       supabase
         .from("lead_queue")
         .select("*")
         .order("queue_rank", { ascending: true })
         .order("scheduled_at", { ascending: true, nullsFirst: false }),
       supabase.rpc("my_dashboard_stats"),
+      supabase.from("sales").select("lead_id, status").in("status", ["pending", "approved"]),
     ]);
     setLeads(freshLeads ?? []);
     setStats(freshStats?.[0] ?? null);
+    setSaleStatusByLead(
+      Object.fromEntries((freshSales ?? []).map((s) => [s.lead_id, s.status])),
+    );
 
     if (selected) {
       setSelected((freshLeads ?? []).find((l) => l.id === selected.id) ?? null);
@@ -143,6 +154,11 @@ export function CallerQueueClient({
                       </span>
                       <LeadStatusBadge status={lead.status} />
                       <FollowUpBadge bucket={lead.follow_up_bucket} />
+                      {lead.business_type && (
+                        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                          {lead.business_type}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-1 font-mono text-xs text-muted-foreground">
                       {lead.phone}
@@ -156,29 +172,51 @@ export function CallerQueueClient({
                       </p>
                     )}
                   </div>
-                  <MotionButton
-                    variant="emerald"
-                    size="sm"
-                    // Full 44px target on phones; the compact size is fine
-                    // once there's a mouse pointer.
-                    className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
-                    onClick={(e) => {
-                      // Without this the card's own onClick also fires and the
-                      // drawer opens behind the new WhatsApp tab.
-                      e.stopPropagation();
-                      window.open(
-                        buildWhatsAppLink(lead.phone, whatsappTemplate, {
-                          name: lead.full_name,
-                          agent: agentName,
-                        }),
-                        "_blank",
-                        "noopener,noreferrer",
-                      );
-                    }}
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />
-                    WhatsApp
-                  </MotionButton>
+                  <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+                    <MotionButton
+                      variant="emerald"
+                      size="sm"
+                      // Full 44px target on phones; the compact size is fine
+                      // once there's a mouse pointer.
+                      className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
+                      onClick={(e) => {
+                        // Without this the card's own onClick also fires and
+                        // the drawer opens behind the new WhatsApp tab.
+                        e.stopPropagation();
+                        window.open(
+                          buildWhatsAppLink(lead.phone, whatsappTemplate, {
+                            name: lead.full_name,
+                            agent: agentName,
+                          }),
+                          "_blank",
+                          "noopener,noreferrer",
+                        );
+                      }}
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      WhatsApp
+                    </MotionButton>
+
+                    {saleStatusByLead[lead.id] ? (
+                      <span className="flex h-11 w-full shrink-0 items-center justify-center sm:h-8 sm:w-auto">
+                        <SaleStatusBadge status={saleStatusByLead[lead.id]} />
+                      </span>
+                    ) : (
+                      <MotionButton
+                        variant="glass"
+                        size="sm"
+                        className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSaleLead(lead);
+                          setSaleSheetOpen(true);
+                        }}
+                      >
+                        <Wallet className="h-3.5 w-3.5" />
+                        Log Sale
+                      </MotionButton>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -193,6 +231,13 @@ export function CallerQueueClient({
         agentName={agentName}
         whatsappTemplate={whatsappTemplate}
         onSaved={refetch}
+      />
+
+      <LogSaleSheet
+        lead={saleLead}
+        open={saleSheetOpen}
+        onOpenChange={setSaleSheetOpen}
+        onLogged={refetch}
       />
     </div>
   );

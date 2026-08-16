@@ -14,7 +14,6 @@ import {
   TriangleAlert,
   UserPlus,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { MotionButton } from "@/components/ui/motion-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +75,7 @@ export function TelecallersClient({
 
   function toggleActive(row: TelecallerRow) {
     return withRow(row.id, async () => {
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const { error: rpcError } = await supabase.rpc("admin_set_user_active", {
         p_user_id: row.id,
@@ -95,6 +95,7 @@ export function TelecallersClient({
 
   function setRole(row: TelecallerRow, role: UserRole) {
     return withRow(row.id, async () => {
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const { error: rpcError } = await supabase.rpc("admin_set_user_role", {
         p_user_id: row.id,

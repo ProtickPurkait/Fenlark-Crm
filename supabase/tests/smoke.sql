@@ -739,7 +739,124 @@ select public.zz_expect_error(
 
 
 -- ===========================================================================
-select public.zz_section('10. Anonymous access');
+select public.zz_section('10. Sales & commission');
+-- ===========================================================================
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+
+-- d1 is Bina's (c1) lead, currently 'connected' from section 3 — logging a
+-- sale against a non-'new' lead is the realistic case and doubles as the
+-- auto-convert check.
+select public.caller_log_sale('00000000-0000-0000-0000-0000000000d1', 'Paid via UPI, confirmed on call.');
+
+select public.zz_expect(
+  (select status from public.leads where id = '00000000-0000-0000-0000-0000000000d1') = 'converted',
+  'logging a sale flips the lead to converted');
+
+select public.zz_expect(
+  (select status = 'pending' and commission_amount = 500 and telecaller_id = '00000000-0000-0000-0000-0000000000c1'
+     from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d1'),
+  'the sale is recorded pending at the standard 500 commission');
+
+select public.zz_expect_error(
+  $q$select public.caller_log_sale('00000000-0000-0000-0000-0000000000d3', 'Poaching attempt')$q$,
+  'caller cannot log a sale for a lead assigned to someone else');
+
+select public.zz_expect_error(
+  $q$select public.caller_log_sale('00000000-0000-0000-0000-0000000000d1', 'Trying again')$q$,
+  'a second sale cannot be logged while one is already pending for the same lead');
+
+-- A second, independent sale to exercise the reject path separately from d1's
+-- approve path below.
+select public.caller_log_sale('00000000-0000-0000-0000-0000000000d2', null);
+
+select public.zz_expect_error(
+  $q$select public.admin_approve_sale(
+       (select id from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d1'))$q$,
+  'a telecaller cannot approve their own sale');
+
+select public.zz_expect_error(
+  $q$select public.admin_reject_sale(
+       (select id from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d2'), 'no')$q$,
+  'a telecaller cannot reject a sale either');
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+select public.admin_approve_sale(
+  (select id from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d1'));
+
+select public.zz_expect(
+  (select status = 'approved' and reviewed_at is not null and reviewed_by = '00000000-0000-0000-0000-0000000000a1'
+     from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d1'),
+  'admin_approve_sale approves and stamps the reviewer and timestamp');
+
+select public.zz_expect_error(
+  $q$select public.admin_approve_sale(
+       (select id from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d1'))$q$,
+  'approving an already-reviewed sale is rejected, not silently re-applied');
+
+select public.zz_expect_error(
+  $q$select public.admin_reject_sale(
+       (select id from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d2'), '   ')$q$,
+  'rejecting requires a non-empty reason');
+
+select public.admin_reject_sale(
+  (select id from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  'Customer denied placing this order.');
+
+select public.zz_expect(
+  (select status = 'rejected' and rejection_reason = 'Customer denied placing this order.'
+     from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  'admin_reject_sale records the rejection reason');
+
+-- Immutability: once reviewed, nothing but acknowledged_at may change again.
+-- Attempted here as the table owner (reset role), the strongest form of the
+-- claim — same reasoning as the lead_history_logs immutability checks above:
+-- the trigger itself blocks this, not merely the revoked authenticated grant.
+reset role;
+
+select public.zz_expect_error(
+  $q$update public.sales set rejection_reason = 'rewritten'
+      where lead_id = '00000000-0000-0000-0000-0000000000d2'$q$,
+  'a reviewed sale''s rejection_reason cannot be edited afterwards');
+
+select public.zz_expect_error(
+  $q$update public.sales set commission_amount = 0
+      where lead_id = '00000000-0000-0000-0000-0000000000d1'$q$,
+  'a reviewed sale''s commission amount is locked');
+
+select public.zz_expect_error(
+  $q$update public.sales set status = 'pending'
+      where lead_id = '00000000-0000-0000-0000-0000000000d1'$q$,
+  'a reviewed sale cannot be reverted to pending');
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+
+-- The one column the immutability guard still permits post-review — this is
+-- the rejection bell's "dismiss" action.
+select public.caller_acknowledge_sale(
+  (select id from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d2'));
+
+select public.zz_expect(
+  (select acknowledged_at is not null from public.sales
+    where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  'acknowledging a rejection is permitted even though the row is locked');
+
+select public.zz_expect(
+  (select balance = 500 and approved_count = 1 and pending_count = 0 and unseen_rejections = 0
+     from public.my_wallet_summary()),
+  'my_wallet_summary reflects one approved 500 commission and zero unseen rejections');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('11. Anonymous access');
 -- ===========================================================================
 
 reset role;
@@ -757,6 +874,10 @@ select public.zz_expect_error(
 select public.zz_expect_error(
   $q$select count(*) from public.call_sessions$q$,
   'anon has no access to call sessions');
+
+select public.zz_expect_error(
+  $q$select count(*) from public.sales$q$,
+  'anon has no access to sales');
 
 reset role;
 

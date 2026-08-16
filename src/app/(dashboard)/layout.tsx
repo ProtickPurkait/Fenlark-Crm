@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/shared/sign-out-button";
+import { RejectionBell } from "@/components/caller/rejection-bell";
 import {
   DashboardNav,
   MobileTabBar,
@@ -19,12 +20,14 @@ const ADMIN_NAV: NavItem[] = [
     icon: "telecallers",
     shortLabel: "Callers",
   },
+  { href: "/admin/sales", label: "Sales", icon: "sales" },
   { href: "/admin/settings", label: "Settings", icon: "settings" },
 ];
 
 const CALLER_NAV: NavItem[] = [
   { href: "/caller", label: "My Queue", icon: "queue", shortLabel: "Queue" },
   { href: "/caller/history", label: "History", icon: "history" },
+  { href: "/caller/earnings", label: "Earnings", icon: "earnings" },
 ];
 
 export default async function DashboardLayout({
@@ -92,6 +95,7 @@ export default async function DashboardLayout({
                 </span>
               )}
             </span>
+            {!isAdmin && <RejectionBell />}
             <SignOutButton />
           </div>
         </div>

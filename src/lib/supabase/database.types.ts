@@ -60,6 +60,10 @@ export type FollowUpBucket =
   | "due_today"
   | "scheduled";
 
+/** pending -> approved | rejected. Both are terminal — see
+ *  enforce_sale_immutability() in 1500_sales_commission.sql. */
+export type SaleStatus = "pending" | "approved" | "rejected";
+
 export interface Database {
   public: {
     Tables: {
@@ -105,6 +109,8 @@ export interface Database {
           email: string | null;
           city: string | null;
           company: string | null;
+          business_type: string | null;
+          address: string | null;
           notes: string | null;
           source: LeadSource;
           source_meta: Json;
@@ -127,6 +133,8 @@ export interface Database {
           email?: string | null;
           city?: string | null;
           company?: string | null;
+          business_type?: string | null;
+          address?: string | null;
           notes?: string | null;
           source?: LeadSource;
           source_meta?: Json;
@@ -139,6 +147,8 @@ export interface Database {
           email?: string | null;
           city?: string | null;
           company?: string | null;
+          business_type?: string | null;
+          address?: string | null;
           notes?: string | null;
           status?: LeadStatus;
           scheduled_at?: string | null;
@@ -217,6 +227,30 @@ export interface Database {
         // it validates the SLA range and stamps updated_by consistently.
         Insert: Partial<Database["public"]["Tables"]["system_settings"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["system_settings"]["Row"]>;
+        Relationships: [];
+      };
+      sales: {
+        Row: {
+          id: string;
+          lead_id: string;
+          telecaller_id: string | null;
+          status: SaleStatus;
+          commission_amount: number;
+          sale_note: string | null;
+          submitted_at: string;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          rejection_reason: string | null;
+          acknowledged_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        // Written exclusively by caller_log_sale / admin_approve_sale /
+        // admin_reject_sale / caller_acknowledge_sale — `authenticated` has no
+        // INSERT/UPDATE/DELETE grant on this table at all (migration 1500).
+        // Same `never`-avoidance note as lead_history_logs above.
+        Insert: Partial<Database["public"]["Tables"]["sales"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["sales"]["Row"]>;
         Relationships: [];
       };
     };
@@ -376,12 +410,38 @@ export interface Database {
         Args: { p_user_id: string; p_active: boolean };
         Returns: void;
       };
+      caller_log_sale: {
+        Args: { p_lead_id: string; p_note?: string | null };
+        Returns: Database["public"]["Tables"]["sales"]["Row"];
+      };
+      admin_approve_sale: {
+        Args: { p_sale_id: string };
+        Returns: Database["public"]["Tables"]["sales"]["Row"];
+      };
+      admin_reject_sale: {
+        Args: { p_sale_id: string; p_reason: string };
+        Returns: Database["public"]["Tables"]["sales"]["Row"];
+      };
+      caller_acknowledge_sale: {
+        Args: { p_sale_id: string };
+        Returns: void;
+      };
+      my_wallet_summary: {
+        Args: Record<string, never>;
+        Returns: {
+          balance: number;
+          approved_count: number;
+          pending_count: number;
+          unseen_rejections: number;
+        }[];
+      };
     };
     Enums: {
       user_role: UserRole;
       lead_status: LeadStatus;
       lead_source: LeadSource;
       audit_event: AuditEvent;
+      sale_status: SaleStatus;
     };
   };
 }
@@ -399,3 +459,4 @@ export type UserProfile = Tables<"users">;
 export type LeadHistoryLog = Tables<"lead_history_logs">;
 export type SystemSettings = Tables<"system_settings">;
 export type CallSession = Tables<"call_sessions">;
+export type Sale = Tables<"sales">;

@@ -3,11 +3,9 @@
 import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FileUp, Loader2, TriangleAlert, X } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { MotionButton } from "@/components/ui/motion-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { parseLeadCsv, type CsvParseResult, type ImportRow } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
 import { springSoft } from "@/lib/motion";
@@ -121,6 +119,7 @@ function CsvImport({ onImported }: { onImported: () => void }) {
     setImporting(true);
     setError(null);
 
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const { data, error: rpcError } = await supabase.rpc("admin_import_leads", {
       p_rows: parsed.rows,
@@ -166,11 +165,13 @@ function CsvImport({ onImported }: { onImported: () => void }) {
           />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Needs a header row. <span className="text-foreground/70">name</span> and{" "}
-          <span className="text-foreground/70">phone</span> are required;{" "}
-          email, city, company and notes are optional. Common variants
-          (&ldquo;Full Name&rdquo;, &ldquo;Mobile&rdquo;, &ldquo;Contact Number&rdquo;)
-          are recognised automatically.
+          Needs a header row with{" "}
+          <span className="text-foreground/70">business name</span>,{" "}
+          <span className="text-foreground/70">business contact</span>,{" "}
+          business category and business address columns.
+          Name and contact are required; category and address are optional.
+          Common variants (&ldquo;Full Name&rdquo;, &ldquo;Mobile&rdquo;,
+          &ldquo;Type&rdquo;) are recognised automatically.
         </p>
       </div>
 
@@ -232,10 +233,10 @@ function CsvImport({ onImported }: { onImported: () => void }) {
               <table className="w-full min-w-[34rem] text-xs">
                 <thead>
                   <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <th className="pb-1.5 pr-4 font-medium">Name</th>
-                    <th className="pb-1.5 pr-4 font-medium">Phone</th>
-                    <th className="pb-1.5 pr-4 font-medium">City</th>
-                    <th className="pb-1.5 font-medium">Company</th>
+                    <th className="pb-1.5 pr-4 font-medium">Business name</th>
+                    <th className="pb-1.5 pr-4 font-medium">Business contact</th>
+                    <th className="pb-1.5 pr-4 font-medium">Category</th>
+                    <th className="pb-1.5 font-medium">Address</th>
                   </tr>
                 </thead>
                 <tbody className="text-foreground/70">
@@ -243,8 +244,8 @@ function CsvImport({ onImported }: { onImported: () => void }) {
                     <tr key={i}>
                       <td className="py-0.5 pr-4">{r.full_name}</td>
                       <td className="py-0.5 pr-4 font-mono">{r.phone}</td>
-                      <td className="py-0.5 pr-4">{r.city ?? "—"}</td>
-                      <td className="py-0.5">{r.company ?? "—"}</td>
+                      <td className="py-0.5 pr-4">{r.business_type ?? "—"}</td>
+                      <td className="py-0.5">{r.address ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -275,10 +276,8 @@ function CsvImport({ onImported }: { onImported: () => void }) {
 const EMPTY_MANUAL: ImportRow = {
   full_name: "",
   phone: "",
-  email: "",
-  city: "",
-  company: "",
-  notes: "",
+  business_type: "",
+  address: "",
 };
 
 function ManualEntry({ onImported }: { onImported: () => void }) {
@@ -296,9 +295,9 @@ function ManualEntry({ onImported }: { onImported: () => void }) {
     e.preventDefault();
     if (inFlight.current) return;
 
-    if (!form.full_name?.trim()) return setError("Name is required.");
+    if (!form.full_name?.trim()) return setError("Business name is required.");
     if (normalizePhone(form.phone).length < 10) {
-      return setError("Enter a valid 10-digit phone number.");
+      return setError("Enter a valid 10-digit contact number.");
     }
 
     inFlight.current = true;
@@ -311,6 +310,7 @@ function ManualEntry({ onImported }: { onImported: () => void }) {
       Object.entries(form).filter(([, v]) => String(v ?? "").trim() !== ""),
     );
 
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const { data, error: rpcError } = await supabase.rpc("admin_import_leads", {
       p_rows: [row],
@@ -334,24 +334,10 @@ function ManualEntry({ onImported }: { onImported: () => void }) {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Full name" required value={form.full_name ?? ""} onChange={(v) => set("full_name", v)} />
-        <Field label="Phone" required value={form.phone ?? ""} onChange={(v) => set("phone", v)} placeholder="98765 43210" mono />
-        <Field label="Email" value={form.email ?? ""} onChange={(v) => set("email", v)} type="email" />
-        <Field label="City" value={form.city ?? ""} onChange={(v) => set("city", v)} />
-        <Field label="Company" value={form.company ?? ""} onChange={(v) => set("company", v)} />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="manual-notes" className="text-xs uppercase tracking-wider text-muted-foreground">
-          Notes
-        </Label>
-        <Textarea
-          id="manual-notes"
-          rows={2}
-          value={form.notes ?? ""}
-          onChange={(e) => set("notes", e.target.value)}
-          className="resize-none"
-        />
+        <Field label="Business name" required value={form.full_name ?? ""} onChange={(v) => set("full_name", v)} />
+        <Field label="Business contact" required value={form.phone ?? ""} onChange={(v) => set("phone", v)} placeholder="98765 43210" mono />
+        <Field label="Business category" value={form.business_type ?? ""} onChange={(v) => set("business_type", v)} />
+        <Field label="Business address" value={form.address ?? ""} onChange={(v) => set("address", v)} />
       </div>
 
       <ResultBanner result={result} singular />

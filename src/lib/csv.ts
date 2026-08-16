@@ -59,7 +59,13 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-/** Column aliases accepted in an uploaded header row, normalised to our keys. */
+/**
+ * Column aliases accepted in an uploaded header row, normalised to our keys.
+ *
+ * Deliberately exactly four fields — business name, contact, category,
+ * address. Every lead here is a business, not an individual, so that's the
+ * whole shape: no email, city, company or notes columns.
+ */
 const HEADER_ALIASES: Record<string, string> = {
   name: "full_name",
   "full name": "full_name",
@@ -68,6 +74,7 @@ const HEADER_ALIASES: Record<string, string> = {
   lead: "full_name",
   "lead name": "full_name",
   contact: "full_name",
+  "business name": "full_name",
 
   phone: "phone",
   mobile: "phone",
@@ -76,39 +83,29 @@ const HEADER_ALIASES: Record<string, string> = {
   number: "phone",
   contact_number: "phone",
   "contact number": "phone",
+  "business contact": "phone",
   whatsapp: "phone",
 
-  email: "email",
-  "email address": "email",
-  email_address: "email",
-  mail: "email",
+  // What kind of business this is (cafe, restaurant, interior decor, ...) —
+  // free text, not a fixed list, so a telecaller always has some context
+  // before dialling even for a category no one anticipated.
+  business_type: "business_type",
+  "business type": "business_type",
+  "business category": "business_type",
+  type: "business_type",
+  category: "business_type",
 
-  city: "city",
-  location: "city",
-  town: "city",
-
-  company: "company",
-  organisation: "company",
-  organization: "company",
-  business: "company",
-  firm: "company",
-
-  notes: "notes",
-  note: "notes",
-  remark: "notes",
-  remarks: "notes",
-  comment: "notes",
-  comments: "notes",
-  message: "notes",
+  address: "address",
+  "business address": "address",
+  "street address": "address",
+  location: "address",
 };
 
 export const IMPORT_FIELDS = [
   "full_name",
   "phone",
-  "email",
-  "city",
-  "company",
-  "notes",
+  "business_type",
+  "address",
 ] as const;
 
 export type ImportField = (typeof IMPORT_FIELDS)[number];

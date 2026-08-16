@@ -16,7 +16,6 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { MotionButton } from "@/components/ui/motion-button";
 import { Input } from "@/components/ui/input";
 import { LeadStatusBadge } from "@/components/shared/lead-status-badge";
@@ -32,6 +31,8 @@ export interface AdminLeadRow {
   email: string | null;
   city: string | null;
   company: string | null;
+  business_type: string | null;
+  address: string | null;
   status: LeadStatus;
   assigned_to: string | null;
   scheduled_at: string | null;
@@ -51,6 +52,7 @@ export function LeadsClient({
   totalCount,
   page,
   pageSize,
+  pageSizeOptions,
   filters,
   telecallers,
 }: {
@@ -58,7 +60,8 @@ export function LeadsClient({
   totalCount: number;
   page: number;
   pageSize: number;
-  filters: { status: string; assignment: string; q: string };
+  pageSizeOptions: readonly number[];
+  filters: { status: string; assignment: string; q: string; sort: "asc" | "desc" };
   telecallers: Telecaller[];
 }) {
   const router = useRouter();
@@ -130,6 +133,7 @@ export function LeadsClient({
   function assignTo(userId: string | null) {
     const ids = [...selected];
     return runBulk(async () => {
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const { error: rpcError, data: count } = await supabase.rpc("admin_assign_leads", {
         p_lead_ids: ids,
@@ -148,6 +152,7 @@ export function LeadsClient({
       if (telecallers.length === 0) {
         return "!No active telecallers to distribute to.";
       }
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const { error: rpcError, data } = await supabase.rpc("admin_round_robin_assign", {
         p_lead_ids: ids,
@@ -165,6 +170,7 @@ export function LeadsClient({
   function archiveSelected() {
     const ids = [...selected];
     return runBulk(async () => {
+      const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       // No bulk archive RPC exists — admin_archive_lead takes one id, so this
       // fans out. Sequential rather than Promise.all: each call is a real
@@ -273,6 +279,37 @@ export function LeadsClient({
         >
           Assigned
         </FilterChip>
+      </motion.div>
+
+      {/* Page size + sort. A bigger page size is how a bulk archive/assign
+          across hundreds or thousands of leads actually works — "select all"
+          below only ever selects what's currently loaded, so loading more is
+          the lever, not a separate "select N" control. */}
+      <motion.div variants={staggerItem} className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Show</span>
+          {pageSizeOptions.map((n) => (
+            <FilterChip
+              key={n}
+              active={pageSize === n}
+              onClick={() => pushParams({ pageSize: String(n) })}
+            >
+              {n.toLocaleString()}
+            </FilterChip>
+          ))}
+        </div>
+
+        <span className="h-4 w-px bg-white/10" aria-hidden />
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Sort</span>
+          <FilterChip active={filters.sort === "desc"} onClick={() => pushParams({ sort: null })}>
+            Newest first
+          </FilterChip>
+          <FilterChip active={filters.sort === "asc"} onClick={() => pushParams({ sort: "asc" })}>
+            Oldest first
+          </FilterChip>
+        </div>
       </motion.div>
 
       {/* Bulk action bar */}
@@ -386,6 +423,11 @@ export function LeadsClient({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium tracking-tight">{lead.full_name}</span>
                   <LeadStatusBadge status={lead.status} />
+                  {lead.business_type && (
+                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                      {lead.business_type}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-0.5 font-mono text-xs text-muted-foreground">
                   {lead.phone}
@@ -453,7 +495,14 @@ export function LeadsClient({
                     />
                   </td>
                   <td className="px-2 py-3">
-                    <div className="font-medium tracking-tight">{lead.full_name}</div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium tracking-tight">{lead.full_name}</span>
+                      {lead.business_type && (
+                        <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                          {lead.business_type}
+                        </span>
+                      )}
+                    </div>
                     <div className="font-mono text-xs text-muted-foreground">
                       {lead.phone}
                       {lead.city ? ` · ${lead.city}` : ""}

@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Loader2, RotateCw, TriangleAlert } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { MotionButton } from "@/components/ui/motion-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,6 +65,7 @@ export function SettingsClient({
     setError(null);
     setSaved(false);
 
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const { data, error: rpcError } = await supabase.rpc("admin_update_settings", {
       p_enabled: enabled,
@@ -99,6 +99,7 @@ export function SettingsClient({
     setError(null);
     setRecycleResult(null);
 
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const { data, error: rpcError } = await supabase.rpc("admin_run_recycle_now");
 

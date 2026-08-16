@@ -10,6 +10,8 @@ import {
   Inbox,
   History,
   ListChecks,
+  Wallet,
+  HandCoins,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,7 +22,9 @@ export type NavIcon =
   | "telecallers"
   | "settings"
   | "queue"
-  | "history";
+  | "history"
+  | "earnings"
+  | "sales";
 
 export interface NavItem {
   href: string;
@@ -40,6 +44,8 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   settings: Settings,
   queue: Inbox,
   history: History,
+  earnings: Wallet,
+  sales: HandCoins,
 };
 
 function useIsActive() {

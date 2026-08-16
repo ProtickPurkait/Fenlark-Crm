@@ -5,7 +5,13 @@ import { LEAD_STATUS_ORDER } from "@/lib/pipeline";
 
 export const metadata = { title: "Leads" };
 
-const PAGE_SIZE = 50;
+// Bulk actions (assign, round-robin, archive) operate on whatever is
+// currently loaded and selected — a bigger page size is how an admin
+// batches a bulk delete/assign across hundreds or thousands of leads at
+// once, not a separate "select N" control. 50 stays the default so a normal
+// day-to-day visit doesn't render thousands of rows nobody asked for.
+const PAGE_SIZE_OPTIONS = [50, 100, 200, 500, 1000, 2000, 5000] as const;
+const DEFAULT_PAGE_SIZE = 50;
 
 // Server Component: owns the URL (filters live in the query string, so a
 // filtered view is shareable/bookmarkable and survives a refresh) and the
@@ -24,15 +30,18 @@ export default async function AdminLeadsPage({
   const assignment = typeof params.assignment === "string" ? params.assignment : "all";
   const q = typeof params.q === "string" ? params.q.trim() : "";
   const page = Math.max(1, Number(params.page) || 1);
+  const sort = params.sort === "asc" ? "asc" : "desc";
+  const pageSize =
+    PAGE_SIZE_OPTIONS.find((n) => n === Number(params.pageSize)) ?? DEFAULT_PAGE_SIZE;
 
   let query = supabase
     .from("leads")
     .select(
-      "id, full_name, phone, email, city, company, status, assigned_to, scheduled_at, last_remark, sla_revoked_count, created_at",
+      "id, full_name, phone, email, city, company, business_type, address, status, assigned_to, scheduled_at, last_remark, sla_revoked_count, created_at",
       { count: "exact" },
     )
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: sort === "asc" });
 
   const statusFilter = LEAD_STATUS_ORDER.find((s) => s === status);
   if (statusFilter) {
@@ -51,8 +60,8 @@ export default async function AdminLeadsPage({
         : query.ilike("full_name", `%${q}%`);
   }
 
-  const from = (page - 1) * PAGE_SIZE;
-  const { data: leads, count } = await query.range(from, from + PAGE_SIZE - 1);
+  const from = (page - 1) * pageSize;
+  const { data: leads, count } = await query.range(from, from + pageSize - 1);
 
   const assignedIds = [
     ...new Set((leads ?? []).map((l) => l.assigned_to).filter(Boolean)),
@@ -86,12 +95,13 @@ export default async function AdminLeadsPage({
       // its internal state (row selection, the search box, any in-flight
       // busy flag) always starts clean rather than carrying a selection of
       // ids that belonged to a different page or filter.
-      key={`${page}-${status}-${assignment}-${q}`}
+      key={`${page}-${status}-${assignment}-${q}-${pageSize}-${sort}`}
       initialRows={rows}
       totalCount={count ?? 0}
       page={page}
-      pageSize={PAGE_SIZE}
-      filters={{ status, assignment, q }}
+      pageSize={pageSize}
+      pageSizeOptions={PAGE_SIZE_OPTIONS}
+      filters={{ status, assignment, q, sort }}
       telecallers={(telecallers ?? []).map(({ id, full_name }) => ({ id, full_name }))}
     />
   );

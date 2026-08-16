@@ -19,7 +19,7 @@
 drop function if exists public.admin_active_calls();
 drop function if exists public.admin_call_stats_today();
 
-create function public.admin_call_activity()
+create or replace function public.admin_call_activity()
 returns table (active jsonb, stats jsonb)
 language plpgsql
 stable
