@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Static asset: colours are hard-coded here because Next.js serves this
+       file directly as the favicon, outside any stylesheet. They mirror
+       --background / --brand / --brand-dot in globals.css. -->
+  <rect width="64" height="64" rx="14" fill="#030711"/>
+  <g transform="translate(13.18 12) scale(0.58824)">
+    <path d="M0 0H64V16H16V30H50V44H16V68L0 58Z" fill="#355AD4"/>
+    <circle cx="57.8" cy="30.4" r="6.2" fill="#497BEE"/>
+  </g>
+</svg>

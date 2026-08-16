@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.local
+.env*.local
+
+# Next.js
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Supabase CLI local state (only present if you use the optional local stack)
+supabase/.branches/
+supabase/.temp/
+
+# dist/all_migrations.sql is generated but IS committed on purpose: it is the
+# one-paste deploy artifact, and having it in the repo makes schema diffs
+# reviewable in a single file.

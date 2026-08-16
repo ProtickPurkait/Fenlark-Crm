@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Dark-only product. The app forces `class="dark"` on <html> in layout.tsx,
+     so :root carries the dark palette directly and .dark simply mirrors it —
+     that way any stray `dark:` variant in a component still resolves rather
+     than silently falling back to an undefined token. */
+  :root,
+  .dark {
+    /* Deep slate/near-black space. */
+    --background: 224 71% 4%;
+    --foreground: 210 20% 98%;
+
+    /* Surfaces sit slightly above the background so glass panels read as
+       lifted rather than painted on. */
+    --card: 224 47% 7%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 50% 6%;
+    --popover-foreground: 210 20% 98%;
+
+    /* Electric blue is the primary action colour. */
+    --primary: 217 91% 60%;
+    --primary-foreground: 224 71% 4%;
+
+    --secondary: 215 28% 14%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 28% 12%;
+    --muted-foreground: 217 15% 65%;
+    --accent: 215 28% 16%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 20% 98%;
+
+    /* Borders are deliberately low-contrast — on glass, the blur and the
+       highlight ring do the separating, not a hard line. */
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.75rem;
+
+    /* Fenlark brand blues, taken from the logo artwork. Kept separate from
+       --neon-blue on purpose: the mark is a fixed brand asset and must not
+       drift if the UI accent is ever retuned. */
+    --brand: 226 65% 52%;
+    --brand-dot: 222 83% 61%;
+
+    /* Neon accent trio, used for status badges, glows and chart segments. */
+    --neon-blue: 217 91% 60%;
+    --neon-emerald: 160 84% 39%;
+    --neon-violet: 263 85% 66%;
+    --neon-amber: 38 92% 50%;
+    --neon-rose: 347 89% 61%;
+    --neon-cyan: 189 94% 55%;
+
+    /* Pipeline status colours, consumed by LeadStatusBadge. */
+    --status-new: var(--neon-blue);
+    --status-attempted: var(--neon-amber);
+    --status-connected: var(--neon-violet);
+    --status-warm: 25 95% 60%;
+    --status-rescheduled: var(--neon-cyan);
+    --status-converted: var(--neon-emerald);
+    --status-dead: 217 10% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* Two large, very low-opacity radial washes give the flat near-black some
+       depth behind the glass panels. Fixed so they don't scroll away. */
+    background-image:
+      radial-gradient(
+        60rem 60rem at 12% -10%,
+        hsl(var(--neon-blue) / 0.09),
+        transparent 60%
+      ),
+      radial-gradient(
+        50rem 50rem at 100% 0%,
+        hsl(var(--neon-violet) / 0.07),
+        transparent 55%
+      );
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+}
+
+@layer components {
+  /* The core glassmorphism surface: semi-transparent fill + backdrop blur +
+     a 1px top highlight that mimics light catching a bevelled edge. */
+  .glass {
+    @apply border border-white/10 bg-card/60 backdrop-blur-xl backdrop-saturate-150;
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.06),
+      0 8px 32px -8px hsl(224 71% 2% / 0.8);
+  }
+
+  .glass-strong {
+    @apply border border-white/10 bg-card/80 backdrop-blur-2xl backdrop-saturate-150;
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.08),
+      0 16px 48px -12px hsl(224 71% 2% / 0.9);
+  }
+}
+
+@layer utilities {
+  /* Scrollbars inside glass panels — the default light scrollbar is jarring
+     against a near-black surface. */
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
