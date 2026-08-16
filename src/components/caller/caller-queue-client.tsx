@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Wallet } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
 import { LeadStatusBadge } from "@/components/shared/lead-status-badge";
 import { FollowUpBadge } from "@/components/shared/follow-up-badge";
@@ -159,6 +159,9 @@ export function CallerQueueClient({
                           {lead.business_type}
                         </span>
                       )}
+                      {saleStatusByLead[lead.id] && (
+                        <SaleStatusBadge status={saleStatusByLead[lead.id]} />
+                      )}
                     </div>
                     <div className="mt-1 font-mono text-xs text-muted-foreground">
                       {lead.phone}
@@ -172,51 +175,32 @@ export function CallerQueueClient({
                       </p>
                     )}
                   </div>
-                  <div className="flex w-full shrink-0 gap-2 sm:w-auto">
-                    <MotionButton
-                      variant="emerald"
-                      size="sm"
-                      // Full 44px target on phones; the compact size is fine
-                      // once there's a mouse pointer.
-                      className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
-                      onClick={(e) => {
-                        // Without this the card's own onClick also fires and
-                        // the drawer opens behind the new WhatsApp tab.
-                        e.stopPropagation();
-                        window.open(
-                          buildWhatsAppLink(lead.phone, whatsappTemplate, {
-                            name: lead.full_name,
-                            agent: agentName,
-                          }),
-                          "_blank",
-                          "noopener,noreferrer",
-                        );
-                      }}
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      WhatsApp
-                    </MotionButton>
-
-                    {saleStatusByLead[lead.id] ? (
-                      <span className="flex h-11 w-full shrink-0 items-center justify-center sm:h-8 sm:w-auto">
-                        <SaleStatusBadge status={saleStatusByLead[lead.id]} />
-                      </span>
-                    ) : (
-                      <MotionButton
-                        variant="glass"
-                        size="sm"
-                        className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSaleLead(lead);
-                          setSaleSheetOpen(true);
-                        }}
-                      >
-                        <Wallet className="h-3.5 w-3.5" />
-                        Log Sale
-                      </MotionButton>
-                    )}
-                  </div>
+                  {/* Just WhatsApp here — every other action (Call Now, Log
+                      Sale, disposition) lives inside the drawer once you tap
+                      the lead, instead of competing for space in this row. */}
+                  <MotionButton
+                    variant="emerald"
+                    size="sm"
+                    // Full 44px target on phones; the compact size is fine
+                    // once there's a mouse pointer.
+                    className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
+                    onClick={(e) => {
+                      // Without this the card's own onClick also fires and
+                      // the drawer opens behind the new WhatsApp tab.
+                      e.stopPropagation();
+                      window.open(
+                        buildWhatsAppLink(lead.phone, whatsappTemplate, {
+                          name: lead.full_name,
+                          agent: agentName,
+                        }),
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
+                    }}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    WhatsApp
+                  </MotionButton>
                 </div>
               </motion.div>
             ))}
@@ -231,6 +215,20 @@ export function CallerQueueClient({
         agentName={agentName}
         whatsappTemplate={whatsappTemplate}
         onSaved={refetch}
+        saleStatus={selected ? saleStatusByLead[selected.id] : undefined}
+        onLogSale={() => {
+          if (!selected) return;
+          const lead = selected;
+          // Close this sheet before opening the next one — Radix handles two
+          // independent open Dialogs fine, but stacking their overlays reads
+          // as broken rather than a deliberate handoff. 300ms matches the
+          // sheet's own close transition (see sheet.tsx).
+          setDrawerOpen(false);
+          setTimeout(() => {
+            setSaleLead(lead);
+            setSaleSheetOpen(true);
+          }, 300);
+        }}
       />
 
       <LogSaleSheet

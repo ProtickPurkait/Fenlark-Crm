@@ -46,7 +46,7 @@ sales).
 
 - Path: `C:\Users\Protick's Laptop\Desktop\claude\fenlark-crm\` (Windows).
 - Git remote: `https://github.com/ProtickPurkait/Fenlark-Crm.git`, branch
-  `main`. Working tree is clean as of this handoff (last commit `42e033c`).
+  `main`. Working tree is clean as of this handoff (last commit `5cde36f`).
 - `.env.local` (gitignored) needs three vars — see `.env.local.example`:
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`. The service role key is server-only, imported
@@ -172,26 +172,28 @@ identical static page) that has nothing to do with app code.
 
 - **Database layer**: schema, RLS, immutable append-only audit trail
   (`lead_history_logs` rejects UPDATE/DELETE/TRUNCATE for everyone including
-  the table owner), phone-number dedup (normalized, hard-blocked), round-robin
-  assignment, SLA-based stale-lead recycling via `pg_cron` (runs every 15 min,
-  independent of the app being up).
+  the table owner, with two narrow, non-client-reachable exceptions — see §7),
+  phone-number dedup (normalized, hard-blocked), round-robin assignment,
+  SLA-based stale-lead recycling via `pg_cron` (runs every 15 min, independent
+  of the app being up).
 - **Auth + middleware role-routing.**
 - **Telecaller app**: lead queue, call-disposition drawer, call-session
   tracking (client-side estimated duration — see §8), Earnings tab
   (wallet balance + transaction history), Log Sale flow, live rejection-alert
   bell (Supabase Realtime).
 - **Admin app**: Dashboard (bento grid, live-calls panel), Leads (CSV import,
-  manual add, assignment/round-robin, bulk archive, page-size selector,
-  sort), Telecallers (manual account creation/deactivation, no email invite
-  flow — see §8), Settings (SLA toggle, recycle-now), **Sales** (approval
-  queue: approve/reject with reason, page-size + status filter).
+  manual add with pre-commit duplicate-phone check, assignment/round-robin,
+  bulk archive, bulk permanent delete, page-size selector, sort), Telecallers
+  (manual account creation/deactivation, no email invite flow — see §8),
+  Settings (SLA toggle, recycle-now), **Sales** (approval queue: approve/
+  reject with reason, page-size + status filter).
 - **Mobile-first + installable PWA**: phone layout is the default (not an
   afterthought), bottom tab bar on mobile, service worker + manifest for
   home-screen install. The service worker caches ONLY content-hashed static
   assets, never HTML or Supabase responses. **Installability only works
   against `fenlark-crm-prod` (port 3101), not `next dev`** — the service
   worker is production-only by design.
-- **Sales & commission system** (most recent feature, migration
+- **Sales & commission system** (migration
   `20260816001500_sales_commission.sql`): telecaller logs a sale from their
   queue → lands in admin's Sales tab as `pending` → admin approves (₹500
   commission locked to telecaller with a timestamp, immutable via a
@@ -200,15 +202,34 @@ identical static page) that has nothing to do with app code.
   status to `converted`. Full RPC surface: `caller_log_sale`,
   `admin_approve_sale`, `admin_reject_sale`, `caller_acknowledge_sale`,
   `my_wallet_summary`.
+- **Permanent lead delete + pre-import duplicate check** (migration
+  `20260816001600_lead_hard_delete.sql`): the Leads screen's bulk-action bar
+  has a "Delete forever" action alongside Archive. It permanently purges a
+  lead's row, audit trail (`lead_history_logs`), and call sessions — *unless*
+  the lead has any sale/commission history (pending, approved, or rejected),
+  in which case it's archived instead, specifically so an approved ₹500 can
+  never lose the lead record its wallet entry points back to. Separately,
+  both CSV and manual "Add leads" now call `admin_check_duplicate_phones`
+  (a read-only dry run) *before* committing, and if any phone in the batch
+  already matches a live lead, a dialog offers "Keep duplicates" (skip the
+  new ones, existing behavior just surfaced up front) or "Delete duplicates &
+  add leads" (removes/archives the existing match via `admin_delete_leads`,
+  then imports). Full RPC surface: `admin_delete_leads(lead_ids)` →
+  `{deleted, archived_instead}`, `admin_check_duplicate_phones(phones)`.
+  See §7 for the narrow audit-trail DELETE exception this required, and §9
+  for a real bug this introduced-then-fixed in the same session.
 - Bundle-weight pass across essentially every client component (see §5).
-- Speed-tested twice this session; last known-clean state.
+- Speed-tested three times this session; last known-clean state. The delete/
+  duplicate-check feature only moved `/admin/leads` (167 kB → 181 kB, all new
+  app code, no new dependency) — every other route is unchanged.
 
 **Not yet done / explicitly deferred:**
 
-- Full interactive end-to-end testing of the sales flow (and generally, most
-  features) using real admin/telecaller logins — no assistant in this project
-  has had actual login credentials, so this has always been the user's job to
-  verify at `http://localhost:3100` (dev) or against the deployed Vercel URL.
+- Full interactive end-to-end testing of the sales flow, and the permanent-
+  delete / duplicate-check flow (and generally, most features) using real
+  admin/telecaller logins — no assistant in this project has had actual login
+  credentials, so this has always been the user's job to verify at
+  `http://localhost:3100` (dev) or against the deployed Vercel URL.
   **If you're picking this up, ask the user whether they've done this and
   what broke, if anything.**
 - A JWT-custom-claims approach to cut middleware from 2 Supabase round trips
@@ -269,6 +290,34 @@ artifacts" — safe to run from the Supabase SQL Editor whenever convenient.
   alone does not make a table's changes flow over Realtime. This has already
   caused one full debugging cycle in this project; don't forget it for a new
   realtime-backed feature.
+- **`lead_history_logs`'s append-only guard (`prevent_log_mutation()`) has
+  exactly two exceptions, both added across this session, both unreachable
+  from any client.** UPDATE: a user deletion nulling `actor_id`/
+  `from_assignee`/`to_assignee` via their `on delete set null` FKs (migration
+  `1200`) — every other column, and re-populating an already-nulled
+  reference, still raises. DELETE: `admin_delete_leads` purging a fully-
+  deleted lead's own log rows (migration `1600`), gated behind a transaction-
+  local `app.allow_log_purge` flag that only that one `is_admin()`-checked
+  function ever sets. **If you ever redefine `prevent_log_mutation()` again,
+  `create or replace function` replaces the *entire* function body — you must
+  carry both existing exceptions forward explicitly, not just add a new one.**
+  This bit us once already in this exact session: a first draft of the
+  DELETE exception silently dropped the UPDATE exception, and the only reason
+  it was caught was `npm run db:test` failing on an unrelated-looking
+  assertion (a user-deletion test from a different section) — not from
+  reading the diff. Re-run the full suite after touching this function, don't
+  eyeball it.
+- **`set_config(name, value, true)` (the `is_local => true` form used
+  throughout this codebase for `app.*` GUCs) is scoped to the whole
+  transaction, not to one statement.** If a function sets a flag like
+  `app.allow_log_purge` to permit one specific write, reset it back
+  explicitly right after that write, in the same function — don't rely on it
+  falling out of scope, because PostgREST's "one RPC call = one transaction"
+  behavior is a runtime assumption, not something the database itself
+  enforces. `admin_delete_leads` does this correctly (see its source); the
+  smoke-test suite caught the case where an earlier draft didn't, because the
+  whole suite runs inside one big transaction and the leaked flag stayed
+  "on" for every statement after it.
 - Re-verify the security posture any time: `npm run security:probe` (asserts
   `anon` cannot reach any table/view/privileged RPC).
 
@@ -294,6 +343,19 @@ artifacts" — safe to run from the Supabase SQL Editor whenever convenient.
 - Fixed ₹500 commission amount is stored per-row (`sales.commission_amount`),
   not hardcoded in every query, in case it needs to vary later — but there is
   currently no UI to set a different amount; it always defaults to 500.
+- **A lead with any sale/commission history can never be permanently
+  deleted**, full stop — `admin_delete_leads` archives it instead, no matter
+  how the request got there (direct bulk delete, or the "delete duplicates &
+  add" path from the import dialog). The user explicitly chose this over
+  "delete everything, no exceptions" and over "delete the lead but keep the
+  commission row orphaned" when asked directly — don't relitigate without
+  raising it with them again.
+- **"Keep duplicate" in the import-duplicate dialog means keep the existing
+  lead and skip the new one** — it does *not* mean allow two leads with the
+  same phone number to coexist. The user explicitly chose this over loosening
+  the hard-block-duplicate-phone constraint when asked directly. The
+  `leads_phone_unique` partial unique index is unchanged and still the real
+  enforcement; the dialog only changes *when* the admin finds out.
 
 ## 9. Recent bug history worth knowing (root causes, already fixed)
 
@@ -324,12 +386,29 @@ artifacts" — safe to run from the Supabase SQL Editor whenever convenient.
   can never prove it was actually *applied* to production** — that requires a
   live check (a temporary Node script against the service-role key is the
   established pattern; see `scripts/security-probe.mjs` for the shape).
+- **Redefining `prevent_log_mutation()` for the permanent-delete feature
+  silently reverted an earlier, unrelated fix** (migration `1200`'s UPDATE
+  exception for FK-nulling on user deletion) because `create or replace
+  function` was written from the *original* migration `0400` version of the
+  function instead of its current, already-patched form. Caught by
+  `npm run db:test` failing on a user-deletion assertion in a completely
+  different section of the smoke suite — not by code review. See §7 for the
+  generalized rule this produced.
+- **A transaction-local escape-hatch GUC (`app.allow_log_purge`) was left set
+  to `'true'` after use**, so within one transaction it stayed open for every
+  statement that followed, not just the one DELETE it was meant to permit.
+  Invisible in production (PostgREST gives each RPC call its own
+  transaction), but caught immediately by the smoke suite, which runs
+  entirely inside one transaction — a regression-guard assertion that tried a
+  raw `DELETE` afterwards unexpectedly succeeded. Fixed by resetting the flag
+  back to `'false'` immediately after the one statement that needs it, inside
+  the same function. See §7 for the generalized rule.
 
 ## 10. How to verify changes in this project
 
 1. `npx tsc --noEmit` — typecheck.
 2. `npm run db:test` — replays all migrations fresh + runs every smoke-test
-   assertion (currently 101). Fast (~5s), no Docker/Supabase CLI needed
+   assertion (currently 114). Fast (~5s), no Docker/Supabase CLI needed
    (PGlite = Postgres-to-WASM).
 3. For bundle-size-sensitive changes: stop dev, `npm run build`, check the
    route's First Load JS, then `rm -rf .next` and restart dev (see §5 for why
@@ -348,4 +427,5 @@ artifacts" — safe to run from the Supabase SQL Editor whenever convenient.
 *Generated 2026-08-16 by Claude (Sonnet 5) at the end of a long build session,
 specifically so a different AI assistant (or a future session with no memory
 of this one) can pick this project up without re-discovering the above the
-hard way.*
+hard way. Updated same day after a follow-up session added permanent lead
+delete + the pre-import duplicate check (commit `5cde36f`).*

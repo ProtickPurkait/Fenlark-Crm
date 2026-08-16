@@ -136,6 +136,10 @@ select public.zz_expect(
     < now() - interval '99 hours',
   'INSERT honours an explicit assigned_at (spreadsheet migration support)');
 
+update public.leads
+   set business_type = 'Cafe', address = '221B Baker Street'
+ where id = '00000000-0000-0000-0000-0000000000d1';
+
 
 -- ===========================================================================
 select public.zz_section('1. Telecaller data isolation');
@@ -186,6 +190,20 @@ select public.zz_expect(
   (select sla_hours_remaining is not null from public.lead_queue
     where id = '00000000-0000-0000-0000-0000000000d5'),
   'SLA countdown still resolves for telecallers after the settings lockdown');
+
+-- Regression guard for migration 1700: lead_queue is `select l.*, ...` and
+-- Postgres freezes that expansion at view-creation time — adding columns to
+-- leads later (business_type/address, migration 1400) does not retroactively
+-- reach a view created before them. This caught exactly that: the data was
+-- always in leads.d1 correctly, but lead_queue silently omitted both columns
+-- for two migrations before 1700 rebuilt the view.
+select public.zz_expect(
+  (select business_type from public.lead_queue
+    where id = '00000000-0000-0000-0000-0000000000d1') = 'Cafe'
+  and
+  (select address from public.lead_queue
+    where id = '00000000-0000-0000-0000-0000000000d1') = '221B Baker Street',
+  'lead_queue surfaces business_type and address, not just leads itself');
 
 
 -- ===========================================================================

@@ -504,6 +504,11 @@ export function LeadsClient({
                   {lead.phone}
                   {lead.city ? ` · ${lead.city}` : ""}
                 </div>
+                {lead.address && (
+                  <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {lead.address}
+                  </div>
+                )}
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span>
                     {lead.assignee_name ?? (
@@ -578,6 +583,11 @@ export function LeadsClient({
                       {lead.phone}
                       {lead.city ? ` · ${lead.city}` : ""}
                     </div>
+                    {lead.address && (
+                      <div className="max-w-[16rem] truncate text-xs text-muted-foreground">
+                        {lead.address}
+                      </div>
+                    )}
                     {lead.sla_revoked_count > 0 && (
                       <div className="mt-0.5 text-[10px] text-[hsl(var(--neon-amber))]">
                         Recycled {lead.sla_revoked_count}×

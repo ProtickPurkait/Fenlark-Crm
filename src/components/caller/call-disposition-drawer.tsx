@@ -9,6 +9,7 @@ import {
   Phone,
   PhoneOff,
   TriangleAlert,
+  Wallet,
 } from "lucide-react";
 import {
   Sheet,
@@ -28,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { LeadStatusBadge } from "@/components/shared/lead-status-badge";
+import { SaleStatusBadge } from "@/components/shared/sale-status-badge";
 import { AuditTimeline } from "@/components/shared/audit-timeline";
 import { buildWhatsAppLink } from "@/lib/phone";
 import {
@@ -40,7 +42,7 @@ import {
   staggerContainer,
   staggerItem,
 } from "@/lib/motion";
-import type { LeadQueueRow, LeadStatus } from "@/lib/supabase/database.types";
+import type { LeadQueueRow, LeadStatus, SaleStatus } from "@/lib/supabase/database.types";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "new", label: "New" },
@@ -59,6 +61,8 @@ interface CallDispositionDrawerProps {
   agentName: string;
   whatsappTemplate: string;
   onSaved: () => void;
+  saleStatus?: SaleStatus;
+  onLogSale: () => void;
 }
 
 // datetime-local wants "YYYY-MM-DDTHH:mm" in *local* time with no timezone
@@ -78,6 +82,8 @@ export function CallDispositionDrawer({
   agentName,
   whatsappTemplate,
   onSaved,
+  saleStatus,
+  onLogSale,
 }: CallDispositionDrawerProps) {
   const [status, setStatus] = useState<LeadStatus>("attempted");
   const [remark, setRemark] = useState("");
@@ -234,22 +240,41 @@ export function CallDispositionDrawer({
                 </SheetTitle>
                 <LeadStatusBadge status={lead.status} className="shrink-0" />
               </div>
-              {/* Business type before phone/city — this is the one piece of
-                  context that tells the telecaller what they're about to
-                  walk into on the call. */}
-              {lead.business_type && (
-                <span className="mt-1 inline-block w-fit rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
-                  {lead.business_type}
-                </span>
-              )}
               <SheetDescription className="font-mono text-xs">
                 {lead.phone}
                 {lead.city ? ` · ${lead.city}` : ""}
               </SheetDescription>
-              {lead.address && (
-                <p className="mt-0.5 text-xs text-muted-foreground">{lead.address}</p>
-              )}
             </SheetHeader>
+
+            {/* Always shown, labeled, with an explicit fallback — this is
+                what the telecaller needs to know before dialling, and a
+                silently-hidden field when the data is missing reads as "not
+                supported" rather than "not filled in yet". */}
+            <motion.div
+              variants={staggerItem}
+              className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-white/5 p-3"
+            >
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Category
+                </p>
+                <p className="mt-0.5 truncate text-sm font-medium">
+                  {lead.business_type || (
+                    <span className="text-muted-foreground/70">Not specified</span>
+                  )}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Address
+                </p>
+                <p className="mt-0.5 text-sm font-medium">
+                  {lead.address || (
+                    <span className="text-muted-foreground/70">Not specified</span>
+                  )}
+                </p>
+              </div>
+            </motion.div>
 
             {/* SLA countdown — only while the lead is still untouched, since
                 that is the only state the recycling engine reclaims from. */}
@@ -318,6 +343,27 @@ export function CallDispositionDrawer({
               <MessageCircle className="h-4 w-4" />
               WhatsApp
             </MotionButton>
+          </motion.div>
+
+          {/* Sale claim lives here too now — under the lead, next to every
+              other action for it, instead of as a separate button sitting
+              beside the lead in the queue list. */}
+          <motion.div variants={staggerItem}>
+            {saleStatus ? (
+              <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">Sale status</span>
+                <SaleStatusBadge status={saleStatus} />
+              </div>
+            ) : (
+              <MotionButton
+                variant="glass"
+                className="h-12 w-full text-base sm:h-10 sm:text-sm"
+                onClick={onLogSale}
+              >
+                <Wallet className="h-4 w-4" />
+                Log Sale
+              </MotionButton>
+            )}
           </motion.div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
