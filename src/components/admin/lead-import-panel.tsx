@@ -6,6 +6,7 @@ import { FileUp, Loader2, TriangleAlert, X } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DuplicateChoiceDialog, type DuplicateMatch } from "@/components/admin/duplicate-choice-dialog";
 import { parseLeadCsv, type CsvParseResult, type ImportRow } from "@/lib/csv";
 import { normalizePhone } from "@/lib/phone";
 import { springSoft } from "@/lib/motion";
@@ -72,6 +73,10 @@ function CsvImport({ onImported }: { onImported: () => void }) {
   const [parsed, setParsed] = useState<CsvParseResult | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [preImportNotice, setPreImportNotice] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -95,6 +100,8 @@ function CsvImport({ onImported }: { onImported: () => void }) {
   async function handleFile(file: File) {
     setError(null);
     setResult(null);
+    setPreImportNotice(null);
+    setDuplicates([]);
     setFileName(file.name);
     try {
       const text = await file.text();
@@ -144,6 +151,75 @@ function CsvImport({ onImported }: { onImported: () => void }) {
     if (fileInput.current) fileInput.current.value = "";
     onImported();
   }
+
+  // Checks the database *before* committing, rather than only reporting
+  // skipped duplicates after the fact — the admin gets to choose what happens
+  // instead of finding out post hoc.
+  async function handleImportClick() {
+    if (!parsed || inFlight.current) return;
+    setError(null);
+    setCheckingDuplicates(true);
+
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data, error: rpcError } = await supabase.rpc("admin_check_duplicate_phones", {
+      p_phones: parsed.rows.map((r) => r.phone ?? ""),
+    });
+
+    setCheckingDuplicates(false);
+
+    if (rpcError) {
+      setError(`Could not check for duplicates: ${rpcError.message}`);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      await runImport();
+      return;
+    }
+
+    setDuplicates(data);
+    setShowDuplicateDialog(true);
+  }
+
+  async function keepDuplicates() {
+    setShowDuplicateDialog(false);
+    await runImport();
+  }
+
+  async function replaceDuplicates() {
+    if (duplicates.length === 0) return;
+    setImporting(true);
+
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data, error: rpcError } = await supabase.rpc("admin_delete_leads", {
+      p_lead_ids: duplicates.map((d) => d.existing_lead_id),
+    });
+
+    if (rpcError) {
+      setImporting(false);
+      setShowDuplicateDialog(false);
+      setError(`Could not remove duplicates: ${rpcError.message}`);
+      return;
+    }
+
+    const row = data?.[0];
+    const deleted = row?.deleted ?? 0;
+    const archived = row?.archived_instead ?? 0;
+    setPreImportNotice(
+      `Removed ${duplicates.length} duplicate${duplicates.length === 1 ? "" : "s"} before importing` +
+        (archived > 0
+          ? ` (${deleted} deleted, ${archived} archived — had sale history).`
+          : "."),
+    );
+
+    setImporting(false);
+    setShowDuplicateDialog(false);
+    await runImport();
+  }
+
+  const busy = importing || checkingDuplicates;
 
   return (
     <div className="space-y-4">
@@ -257,16 +333,31 @@ function CsvImport({ onImported }: { onImported: () => void }) {
               )}
             </div>
 
-            <MotionButton onClick={runImport} disabled={importing} className="mt-4">
-              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-              {importing ? "Importing…" : `Import ${parsed.rows.length} lead${parsed.rows.length === 1 ? "" : "s"}`}
+            <MotionButton onClick={handleImportClick} disabled={busy} className="mt-4">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+              {checkingDuplicates
+                ? "Checking for duplicates…"
+                : importing
+                  ? "Importing…"
+                  : `Import ${parsed.rows.length} lead${parsed.rows.length === 1 ? "" : "s"}`}
             </MotionButton>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {preImportNotice && <p className="text-xs text-muted-foreground">{preImportNotice}</p>}
       <ResultBanner result={result} />
       <ErrorBanner error={error} />
+
+      <DuplicateChoiceDialog
+        open={showDuplicateDialog}
+        onOpenChange={setShowDuplicateDialog}
+        matches={duplicates}
+        newCount={parsed?.rows.length ?? 0}
+        busy={importing}
+        onKeep={keepDuplicates}
+        onReplace={replaceDuplicates}
+      />
     </div>
   );
 }
@@ -283,32 +374,21 @@ const EMPTY_MANUAL: ImportRow = {
 function ManualEntry({ onImported }: { onImported: () => void }) {
   const [form, setForm] = useState<ImportRow>(EMPTY_MANUAL);
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [duplicate, setDuplicate] = useState<DuplicateMatch | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [preImportNotice, setPreImportNotice] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const pendingRow = useRef<Record<string, string | undefined> | null>(null);
 
   function set(field: keyof ImportRow, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (inFlight.current) return;
-
-    if (!form.full_name?.trim()) return setError("Business name is required.");
-    if (normalizePhone(form.phone).length < 10) {
-      return setError("Enter a valid 10-digit contact number.");
-    }
-
-    inFlight.current = true;
+  async function doImport(row: Record<string, string | undefined>) {
     setSaving(true);
-    setError(null);
-    setResult(null);
-
-    // Strip empties so the RPC stores NULL rather than "" for absent fields.
-    const row = Object.fromEntries(
-      Object.entries(form).filter(([, v]) => String(v ?? "").trim() !== ""),
-    );
 
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
@@ -331,6 +411,88 @@ function ManualEntry({ onImported }: { onImported: () => void }) {
     onImported();
   }
 
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (inFlight.current) return;
+
+    if (!form.full_name?.trim()) return setError("Business name is required.");
+    if (normalizePhone(form.phone).length < 10) {
+      return setError("Enter a valid 10-digit contact number.");
+    }
+
+    inFlight.current = true;
+    setError(null);
+    setResult(null);
+    setPreImportNotice(null);
+
+    // Strip empties so the RPC stores NULL rather than "" for absent fields.
+    const row = Object.fromEntries(
+      Object.entries(form).filter(([, v]) => String(v ?? "").trim() !== ""),
+    );
+
+    setChecking(true);
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data, error: rpcError } = await supabase.rpc("admin_check_duplicate_phones", {
+      p_phones: [form.phone ?? ""],
+    });
+    setChecking(false);
+
+    if (rpcError) {
+      inFlight.current = false;
+      setError(`Could not check for duplicates: ${rpcError.message}`);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      await doImport(row);
+      return;
+    }
+
+    pendingRow.current = row;
+    setDuplicate(data[0]);
+    setShowDuplicateDialog(true);
+    inFlight.current = false;
+  }
+
+  async function keepDuplicate() {
+    setShowDuplicateDialog(false);
+    if (!pendingRow.current) return;
+    inFlight.current = true;
+    await doImport(pendingRow.current);
+  }
+
+  async function replaceDuplicate() {
+    if (!duplicate || !pendingRow.current) return;
+    setShowDuplicateDialog(false);
+    setSaving(true);
+    inFlight.current = true;
+
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data, error: rpcError } = await supabase.rpc("admin_delete_leads", {
+      p_lead_ids: [duplicate.existing_lead_id],
+    });
+
+    if (rpcError) {
+      setSaving(false);
+      inFlight.current = false;
+      setError(`Could not remove the duplicate: ${rpcError.message}`);
+      return;
+    }
+
+    const archived = data?.[0]?.archived_instead ?? 0;
+    setPreImportNotice(
+      archived > 0
+        ? "The existing duplicate had sale history, so it was archived instead of deleted, before adding this one."
+        : "Removed the existing duplicate lead before adding this one.",
+    );
+
+    await doImport(pendingRow.current);
+  }
+
+  const busy = saving || checking;
+
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -340,13 +502,24 @@ function ManualEntry({ onImported }: { onImported: () => void }) {
         <Field label="Business address" value={form.address ?? ""} onChange={(v) => set("address", v)} />
       </div>
 
+      {preImportNotice && <p className="text-xs text-muted-foreground">{preImportNotice}</p>}
       <ResultBanner result={result} singular />
       <ErrorBanner error={error} />
 
-      <MotionButton type="submit" disabled={saving}>
-        {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-        {saving ? "Adding…" : "Add lead"}
+      <MotionButton type="submit" disabled={busy}>
+        {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+        {checking ? "Checking…" : saving ? "Adding…" : "Add lead"}
       </MotionButton>
+
+      <DuplicateChoiceDialog
+        open={showDuplicateDialog}
+        onOpenChange={setShowDuplicateDialog}
+        matches={duplicate ? [duplicate] : []}
+        newCount={1}
+        busy={saving}
+        onKeep={keepDuplicate}
+        onReplace={replaceDuplicate}
+      />
     </form>
   );
 }

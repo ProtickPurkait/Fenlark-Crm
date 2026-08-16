@@ -35,6 +35,15 @@ table.
 `DELETE` and `TRUNCATE` for everyone including the table owner. Corrections are
 made by appending, never by rewriting. This is what makes "who did what, even if
 a status is reversed months later" true rather than aspirational.
+Two narrow exceptions exist, both unreachable from any client. `UPDATE`:
+migration `1200` lets a user deletion null `actor_id`/`from_assignee`/
+`to_assignee` via their `on delete set null` FKs — every other column, and
+re-populating an already-nulled reference, still raises. `DELETE`: migration
+`1600`'s `admin_delete_leads` permanently purges a lead's own log rows as
+part of destroying that lead entirely, gated behind a transaction-local flag
+only that one `is_admin()`-checked function ever sets. Leads with sale/
+commission history are archived instead, specifically so this exception can
+never touch a row a telecaller's earnings history depends on.
 
 **There is no unaudited write path.** All lead mutations pass through a single
 `AFTER` trigger that writes the timeline. The recycling engine writes no log
@@ -119,7 +128,8 @@ Other guarantees, all covered by `npm run db:test`:
 |---|---|
 | Telecallers see only their own leads | RLS `leads_select` |
 | Telecallers cannot reassign, in either direction | RLS `WITH CHECK` + `enforce_lead_update_rules` |
-| Audit trail cannot be edited or truncated | `prevent_log_mutation` (fires for the table owner too) |
+| Audit trail cannot be edited or truncated | `prevent_log_mutation` (fires for the table owner too; one narrow DELETE exception, see above) |
+| A lead with sale history can never be hard-deleted | `admin_delete_leads` archives it instead |
 | SLA clock cannot be backdated | `enforce_lead_update_rules` owns `assigned_at` |
 | No unaudited write path | Single `AFTER` trigger on every lead mutation |
 | Full config row is admin-only | RLS `settings_select_admin`; telecallers read `app_settings` |
@@ -215,6 +225,8 @@ Order the queue by `queue_rank, scheduled_at nulls last` and Overdue → Due Soo
 | `admin_assign_leads(lead_ids, user_id)` | Manual assignment. Pass `null` to return leads to the pool. |
 | `admin_round_robin_assign(lead_ids, user_ids)` | Even distribution. Returns per-caller counts. |
 | `admin_archive_lead(lead_id, reason)` | Soft delete with an audit note. |
+| `admin_delete_leads(lead_ids)` | Permanent delete. Any lead with sale/commission history is archived instead of destroyed. Returns `deleted`, `archived_instead`. |
+| `admin_check_duplicate_phones(phones)` | Pre-import dry run — reports which of a batch of phone numbers already match a live lead, before `admin_import_leads` is called. |
 | `admin_update_settings(enabled, sla_hours, whatsapp_template)` | Backs the Settings panel. Nulls leave values untouched. |
 | `admin_run_recycle_now()` | Manual SLA sweep; returns the number reclaimed. |
 | `admin_set_user_role(user_id, role)` / `admin_set_user_active(user_id, active)` | Team management. Refuses to strand the last admin. |

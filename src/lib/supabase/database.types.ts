@@ -338,6 +338,24 @@ export interface Database {
         Args: { p_lead_id: string; p_reason?: string | null };
         Returns: void;
       };
+      // Leads with any sale history are archived instead of destroyed — see
+      // migration 1600. `deleted` and `archived_instead` should be summed to
+      // get the total number of ids actually acted on.
+      admin_delete_leads: {
+        Args: { p_lead_ids: string[] };
+        Returns: {
+          deleted: number;
+          archived_instead: number;
+        }[];
+      };
+      admin_check_duplicate_phones: {
+        Args: { p_phones: string[] };
+        Returns: {
+          phone_normalized: string;
+          existing_lead_id: string;
+          existing_full_name: string;
+        }[];
+      };
       admin_update_settings: {
         Args: {
           p_enabled?: boolean | null;

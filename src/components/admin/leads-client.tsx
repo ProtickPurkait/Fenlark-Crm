@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   Shuffle,
+  Trash2,
   TriangleAlert,
   UserCheck,
   X,
@@ -84,9 +85,19 @@ export function LeadsClient({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const allSelected = rows.length > 0 && selected.size === rows.length;
+
+  // The confirm strip lives in this component, not inside the bulk-action
+  // bar's own conditionally-rendered subtree, so it doesn't auto-reset when
+  // that subtree unmounts (selection going to zero). Covers every path that
+  // empties the selection: a completed bulk action, the Clear button, or
+  // deselecting the last checked row.
+  useEffect(() => {
+    if (selected.size === 0) setConfirmingDelete(false);
+  }, [selected.size]);
 
   function pushParams(next: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -189,6 +200,28 @@ export function LeadsClient({
         return `!Archived ${ids.length - failed} of ${ids.length}; ${failed} failed.`;
       }
       return `Archived ${ids.length} lead${ids.length === 1 ? "" : "s"}.`;
+    });
+  }
+
+  function deleteSelected() {
+    const ids = [...selected];
+    setConfirmingDelete(false);
+    return runBulk(async () => {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      const { error: rpcError, data } = await supabase.rpc("admin_delete_leads", {
+        p_lead_ids: ids,
+      });
+      if (rpcError) return `!Could not delete: ${rpcError.message}`;
+
+      const row = data?.[0];
+      const deleted = row?.deleted ?? 0;
+      const archived = row?.archived_instead ?? 0;
+      let message = `Deleted ${deleted} lead${deleted === 1 ? "" : "s"} permanently.`;
+      if (archived > 0) {
+        message += ` ${archived} had sale history and ${archived === 1 ? "was" : "were"} archived instead.`;
+      }
+      return message;
     });
   }
 
@@ -359,6 +392,16 @@ export function LeadsClient({
               Archive
             </MotionButton>
 
+            <MotionButton
+              variant="destructive"
+              size="sm"
+              onClick={() => setConfirmingDelete((v) => !v)}
+              disabled={busy}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete forever
+            </MotionButton>
+
             {busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
 
             <MotionButton
@@ -370,6 +413,34 @@ export function LeadsClient({
               <X className="h-3.5 w-3.5" />
               Clear
             </MotionButton>
+
+            <AnimatePresence>
+              {confirmingDelete && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="w-full overflow-hidden"
+                >
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+                    <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--neon-rose))]" />
+                    <span className="text-sm">
+                      Permanently delete {selected.size} lead
+                      {selected.size === 1 ? "" : "s"}? This cannot be undone.
+                      Any with sale history will be archived instead.
+                    </span>
+                    <div className="ml-auto flex gap-2">
+                      <MotionButton variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>
+                        Cancel
+                      </MotionButton>
+                      <MotionButton variant="destructive" size="sm" onClick={deleteSelected}>
+                        Confirm delete
+                      </MotionButton>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

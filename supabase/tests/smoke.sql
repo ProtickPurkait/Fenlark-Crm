@@ -856,7 +856,101 @@ reset role;
 
 
 -- ===========================================================================
-select public.zz_section('11. Anonymous access');
+select public.zz_section('12. Permanent delete & duplicate check');
+-- ===========================================================================
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c2"}', true);
+
+select public.zz_expect_error(
+  $q$select public.admin_delete_leads(array['00000000-0000-0000-0000-0000000000d3']::uuid[])$q$,
+  'a telecaller cannot permanently delete a lead');
+
+select public.zz_expect_error(
+  $q$select public.admin_check_duplicate_phones(array['9811100003'])$q$,
+  'a telecaller cannot run the duplicate-phone check');
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+-- d3 has no sale history but does have audit log entries and a call session
+-- (from sections 0 and 8) — the strongest version of "hard delete actually
+-- purges everything", not just the lead row itself.
+select public.zz_expect(
+  (select count(*) from public.lead_history_logs where lead_id = '00000000-0000-0000-0000-0000000000d3') > 0
+  and (select count(*) from public.call_sessions where lead_id = '00000000-0000-0000-0000-0000000000d3') > 0,
+  'the lead about to be hard-deleted has both history and call session rows to purge');
+
+select public.zz_expect(
+  (select deleted = 1 and archived_instead = 0
+     from public.admin_delete_leads(array['00000000-0000-0000-0000-0000000000d3']::uuid[])),
+  'admin_delete_leads reports one hard delete for a lead with no sale history');
+
+select public.zz_expect(
+  not exists (select 1 from public.leads where id = '00000000-0000-0000-0000-0000000000d3'),
+  'the lead row itself is gone, not just archived');
+
+select public.zz_expect(
+  not exists (select 1 from public.lead_history_logs where lead_id = '00000000-0000-0000-0000-0000000000d3'),
+  'its audit trail is purged along with it');
+
+select public.zz_expect(
+  not exists (select 1 from public.call_sessions where lead_id = '00000000-0000-0000-0000-0000000000d3'),
+  'its call sessions are purged along with it');
+
+-- d1 has an approved 500 commission from section 10 — the one case that must
+-- never be destroyed, since a telecaller's wallet history points back to it.
+select public.zz_expect(
+  (select deleted = 0 and archived_instead = 1
+     from public.admin_delete_leads(array['00000000-0000-0000-0000-0000000000d1']::uuid[])),
+  'a lead with sale history is archived instead of deleted');
+
+select public.zz_expect(
+  (select deleted_at is not null from public.leads where id = '00000000-0000-0000-0000-0000000000d1'),
+  'the protected lead ends up archived, not gone');
+
+select public.zz_expect(
+  (select status = 'approved' and commission_amount = 500
+     from public.sales where lead_id = '00000000-0000-0000-0000-0000000000d1'),
+  'the approved commission record is completely untouched');
+
+-- Regression guard: the narrow DELETE escape hatch used internally by
+-- admin_delete_leads must not have opened a general hole. Attempted as the
+-- table owner (reset role), same reasoning as section 9's checks — the
+-- trigger itself must block this, not merely a revoked grant.
+reset role;
+
+select public.zz_expect_error(
+  $q$delete from public.lead_history_logs where id = (select min(id) from public.lead_history_logs)$q$,
+  'deleting an audit entry directly is still rejected outside admin_delete_leads');
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+-- d6 stays live and untouched throughout this file. Formatted differently
+-- from how it's stored to prove normalize_phone() is applied on both sides
+-- of the comparison, not just to the stored data.
+select public.zz_expect(
+  (select existing_lead_id from public.admin_check_duplicate_phones(array['+91 98111 00006']))
+    = '00000000-0000-0000-0000-0000000000d6',
+  'admin_check_duplicate_phones matches an existing lead by normalised phone, formatting and all');
+
+-- d4 is unassigned and otherwise untouched — archive it here specifically to
+-- prove the duplicate check honours the same partial-index semantics as
+-- leads_phone_unique itself: an archived phone number is free to reuse.
+select public.admin_archive_lead('00000000-0000-0000-0000-0000000000d4', 'test archive');
+
+select public.zz_expect(
+  (select count(*) from public.admin_check_duplicate_phones(array['9811100004'])) = 0,
+  'an archived lead''s phone number is not reported as a duplicate');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('13. Anonymous access');
 -- ===========================================================================
 
 reset role;
