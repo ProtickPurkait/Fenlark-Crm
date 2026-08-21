@@ -41,7 +41,7 @@ export function SaleStatusBadge({
     >
       <span
         aria-hidden
-        className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_6px_currentColor]"
+        className="h-1.5 w-1.5 rounded-full bg-current"
       />
       {LABELS[status]}
     </motion.span>

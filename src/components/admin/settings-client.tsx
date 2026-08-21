@@ -223,11 +223,11 @@ export function SettingsClient({
         <h2 className="font-medium tracking-tight">WhatsApp template</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Pre-filled when a telecaller taps WhatsApp on a lead.{" "}
-          <code className="rounded bg-white/5 px-1 py-0.5 font-mono text-xs">
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
             {"{{name}}"}
           </code>{" "}
           and{" "}
-          <code className="rounded bg-white/5 px-1 py-0.5 font-mono text-xs">
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
             {"{{agent}}"}
           </code>{" "}
           are substituted per message.
@@ -240,7 +240,7 @@ export function SettingsClient({
           className="mt-4 resize-none"
         />
 
-        <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+        <div className="mt-3 rounded-lg border border-border bg-muted p-3">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Preview
           </p>

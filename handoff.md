@@ -29,6 +29,11 @@ sales).
   Turbopack, see §4.
 - **Tailwind CSS v3**, hand-authored shadcn "new-york"-style components (no
   shadcn CLI dependency), `framer-motion` for animation, `lucide-react` icons.
+- **Light-only theme** (`Plus Jakarta Sans` + `JetBrains Mono` via `next/font`,
+  one signal-blue accent). This replaced an earlier dark glass/neon-glow
+  identity wholesale — see §6 for what changed and why, and don't assume
+  `dark:` variants or the old near-black palette from any pre-redesign mental
+  model or screenshot.
 - **Supabase**: Postgres + Row Level Security + `pg_cron`, `@supabase/ssr` for
   the Next.js client/server split. **No ORM.** No PostgREST embedded/foreign
   selects anywhere — every multi-table view is a manual `id → row` map built in
@@ -46,7 +51,7 @@ sales).
 
 - Path: `C:\Users\Protick's Laptop\Desktop\claude\fenlark-crm\` (Windows).
 - Git remote: `https://github.com/ProtickPurkait/Fenlark-Crm.git`, branch
-  `main`. Working tree is clean as of this handoff (last commit `5cde36f`).
+  `main`. Working tree is clean as of this handoff (last commit `55b8dad`).
 - `.env.local` (gitignored) needs three vars — see `.env.local.example`:
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`. The service role key is server-only, imported
@@ -218,17 +223,99 @@ identical static page) that has nothing to do with app code.
   `{deleted, archived_instead}`, `admin_check_duplicate_phones(phones)`.
   See §7 for the narrow audit-trail DELETE exception this required, and §9
   for a real bug this introduced-then-fixed in the same session.
+- **Telecaller mobile-layout fix + Log Sale relocated into the drawer**: the
+  queue row had a genuine overflow bug — the WhatsApp button and a separate
+  Log Sale button were both `w-full shrink-0` inside a non-wrapping flex row,
+  so on a phone the two competed for 100% width each. Fixed by removing the
+  standalone Log Sale button from the row entirely and surfacing it as an
+  action inside `CallDispositionDrawer` instead, alongside Call Now/WhatsApp/
+  status/follow-up/remarks — matching how every other lead action already
+  works, per the user's explicit ask that it live "under the lead," not
+  beside it in the list.
+- **Business category/address now surfaced everywhere they're missing**: the
+  disposition drawer shows a labeled Category/Address panel (previously
+  category was an unlabeled pill and address wasn't shown with any label);
+  `leads-client.tsx` (admin) now renders `address` in both the mobile card and
+  desktop table — it was already in the row type and query but was never
+  actually rendered. See §9 for the deeper root-cause bug this surfaced
+  (migration `20260816001700_lead_queue_business_fields.sql`) — **that
+  migration's live-DB status is unconfirmed as of this handoff; until it's
+  run, the telecaller queue will keep showing "Not specified" for both
+  fields even though this UI code is deployed.**
+- **Full visual redesign: dark glass/neon-glow → light, ink-neutral, one-accent
+  theme.** Started from a mockup built with the ui-ux-pro-max and taste-skill
+  design skills, then implemented for real across the whole app. What changed:
+  - `globals.css`: every CSS custom property repointed to a light HSL palette
+    (paper background, near-white cards, ink-950 text, `--primary` = an
+    electric signal blue `230 100% 60%`). `--success`/`--warning`/`--critical`
+    are new semantic tokens, kept deliberately separate from `--primary` so a
+    button is never mistaken for a status. **The `--neon-*` variable names
+    (`--neon-blue`, `--neon-emerald`, etc.) were kept as aliases onto the new
+    semantic tokens** rather than hunting down every `hsl(var(--neon-blue))`
+    call site — cheapest way to re-theme ~20 files that reference them
+    directly. Same reasoning for the `.glass` / `.glass-strong` class names:
+    redefined in `globals.css` as flat bordered cards with a soft shadow (no
+    more `backdrop-blur`/`border-white/10`), so every component built on
+    `<Card>`, `<Sheet>`, `BentoCard`, etc. picked up the new look for free
+    without a single call-site edit. **If you ever see `neon-` or `glass` in
+    this codebase, that's legacy naming carried forward for low-risk
+    migration — it does not mean the app is still dark or still glowing.**
+  - `src/app/layout.tsx`: `next/font/google` now loads Plus Jakarta Sans
+    (`--font-sans`) and JetBrains Mono (`--font-mono`); the root `<html>` no
+    longer forces `className="dark"` — `colorScheme` is `"light"` instead.
+  - New `src/components/admin/admin-sidebar.tsx`: admin gets a fixed dark
+    rail (the one place the product deliberately stays dark) on `md:` and up,
+    replacing the shared top nav for that role. Below `md:`, admin falls back
+    to the same top header + bottom `MobileTabBar` telecallers always use —
+    the rail has no mobile variant. `(dashboard)/layout.tsx` branches on
+    `isAdmin` to pick which chrome renders; `NAV_ICONS` was exported from
+    `dashboard-nav.tsx` so the sidebar can reuse the same icon map.
+  - Every remaining hardcoded dark-mode utility (`border-white/10`,
+    `bg-white/[0.0x]`, `backdrop-blur-*`, `shadow-glow-*`, `shadow-[0_0_
+    ...currentColor]` glow dots) was swept from ~30 files — primitives in
+    `src/components/ui/` first (`card`, `input`, `select`, `switch`,
+    `textarea`, `sheet`, `bento`, `skeleton`, `motion-button`), then every
+    page/panel component. **If a new component still has a literal
+    `white/`-opacity or `backdrop-blur` class, it was missed by this pass —
+    treat it as a bug, not an intentional dark accent.**
+  - `public/manifest.webmanifest` and the `themeColor` in `layout.tsx` were
+    repointed from the old near-black `#030711` to the new paper background
+    `#F4F5F7`, so the installed-PWA splash screen and Android status bar tint
+    match the new theme.
+  - **Verification note for whoever picks this up next:** `npx tsc --noEmit`
+    and `npm run build` both pass clean (every route compiles, including
+    every `admin/*`/`caller/*` page). Only `/login` could be visually
+    confirmed live in a real browser this session — no assistant here has
+    real admin/telecaller credentials (see the note further down in this
+    section), so the authenticated screens were verified by the exhaustive
+    grep sweep + clean build, not a click-through. **Ask the user to eyeball
+    the admin dashboard, leads table, and the telecaller queue/drawer on a
+    real login before trusting this is pixel-perfect everywhere.**
 - Bundle-weight pass across essentially every client component (see §5).
 - Speed-tested three times this session; last known-clean state. The delete/
   duplicate-check feature only moved `/admin/leads` (167 kB → 181 kB, all new
-  app code, no new dependency) — every other route is unchanged.
+  app code, no new dependency) — every other route is unchanged. The redesign
+  itself added `next/font` (self-hosted, subsetted) but no new npm dependency;
+  bundle sizes per route are essentially unchanged from before it.
+
+**Immediate pending action (not a code task — a live-DB step for the user):**
+
+- **Run migration `20260816001700_lead_queue_business_fields.sql` in the
+  Supabase SQL Editor.** It rebuilds the `lead_queue` view (drop + recreate,
+  not `create or replace` — see §9 for why) so it stops omitting
+  `business_type`/`address`. The code side of this fix is already pushed
+  (commit `55b8dad`); as of this handoff the user has not yet confirmed
+  running the SQL side. If you're picking this up, ask first — don't assume
+  it's done, and don't re-diagnose the "Not specified" symptom from scratch
+  if it's reported again; check this first.
 
 **Not yet done / explicitly deferred:**
 
-- Full interactive end-to-end testing of the sales flow, and the permanent-
-  delete / duplicate-check flow (and generally, most features) using real
-  admin/telecaller logins — no assistant in this project has had actual login
-  credentials, so this has always been the user's job to verify at
+- Full interactive end-to-end testing of the sales flow, the permanent-
+  delete / duplicate-check flow, and now the full light-theme redesign
+  (admin sidebar, every recolored screen) using real admin/telecaller
+  logins — no assistant in this project has had actual login credentials,
+  so this has always been the user's job to verify at
   `http://localhost:3100` (dev) or against the deployed Vercel URL.
   **If you're picking this up, ask the user whether they've done this and
   what broke, if anything.**
@@ -403,12 +490,37 @@ artifacts" — safe to run from the Supabase SQL Editor whenever convenient.
   raw `DELETE` afterwards unexpectedly succeeded. Fixed by resetting the flag
   back to `'false'` immediately after the one statement that needs it, inside
   the same function. See §7 for the generalized rule.
+- **`lead_queue` silently omitted `business_type`/`address` for two
+  migrations' worth of time, even though `leads` itself always had correct
+  data.** The view is defined as `select l.*, ... from public.leads l`, and
+  Postgres expands `l.*` into a fixed column list **at CREATE/CREATE OR
+  REPLACE time** — it does not track the underlying table afterwards. The
+  view was last (re)created by migration `1000`, before migration `1400`
+  added those two columns to `leads`, so every telecaller-facing read of the
+  queue (and the disposition drawer built from it) silently dropped both
+  fields from that point on, while the admin Leads screen — which queries
+  `leads` directly, not the view — was unaffected. Root-caused via a
+  temporary, read-only Node script against the live service-role key
+  (proving the data itself was correct) plus static analysis of migration
+  history (proving the view predated the columns). Fixed in migration
+  `1700` with `drop view` + `create view` (not `create or replace view`):
+  Postgres only allows `CREATE OR REPLACE VIEW` to *append* new columns at
+  the very end of the existing list, and `business_type`/`address` land in
+  the middle (wherever `l.*` expands them, ahead of the computed
+  `follow_up_bucket`/`queue_rank`/`sla_hours_remaining` columns) — Postgres
+  rejects that with `cannot change name of view column "follow_up_bucket" to
+  "business_type"`. **General lesson, not specific to these two columns: any
+  future column added to `leads` will need this same view rebuilt again, or
+  it will silently vanish from the telecaller queue the same way.** A
+  regression-guard smoke-test assertion now checks `lead_queue` surfaces both
+  columns, not just `leads` itself — see the migration's own comments for
+  the full reasoning.
 
 ## 10. How to verify changes in this project
 
 1. `npx tsc --noEmit` — typecheck.
 2. `npm run db:test` — replays all migrations fresh + runs every smoke-test
-   assertion (currently 114). Fast (~5s), no Docker/Supabase CLI needed
+   assertion (currently 115). Fast (~5s), no Docker/Supabase CLI needed
    (PGlite = Postgres-to-WASM).
 3. For bundle-size-sensitive changes: stop dev, `npm run build`, check the
    route's First Load JS, then `rm -rf .next` and restart dev (see §5 for why
@@ -428,4 +540,7 @@ artifacts" — safe to run from the Supabase SQL Editor whenever convenient.
 specifically so a different AI assistant (or a future session with no memory
 of this one) can pick this project up without re-discovering the above the
 hard way. Updated same day after a follow-up session added permanent lead
-delete + the pre-import duplicate check (commit `5cde36f`).*
+delete + the pre-import duplicate check (commit `5cde36f`), then again after a
+session that fixed the telecaller mobile layout, moved Log Sale into the
+drawer, and fixed `lead_queue` silently omitting business_type/address
+(commit `55b8dad`) — see §9 for that bug and the pending live-DB step in §6.*

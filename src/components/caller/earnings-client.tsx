@@ -80,7 +80,7 @@ export function EarningsClient({
       {/* Wallet hero */}
       <motion.div
         variants={staggerItem}
-        className="glass rounded-2xl p-6 shadow-glow-soft"
+        className="glass rounded-2xl p-6"
       >
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <Wallet className="h-3.5 w-3.5" />
@@ -133,7 +133,7 @@ export function EarningsClient({
                     {row.lead_name}
                   </span>
                   {row.business_type && (
-                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
                       {row.business_type}
                     </span>
                   )}
@@ -175,7 +175,7 @@ export function EarningsClient({
         <div className="overflow-x-auto scrollbar-slim">
           <table className="w-full min-w-[48rem] text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-3 font-medium">Sale</th>
                 <th className="px-2 py-3 font-medium">Date</th>
                 <th className="px-2 py-3 font-medium">Time</th>
@@ -189,13 +189,13 @@ export function EarningsClient({
                 return (
                   <tr
                     key={row.id}
-                    className="border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.03]"
+                    className="border-b border-border transition-colors last:border-0 hover:bg-foreground/[0.03]"
                   >
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium tracking-tight">{row.lead_name}</span>
                         {row.business_type && (
-                          <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
                             {row.business_type}
                           </span>
                         )}
@@ -319,7 +319,7 @@ function FilterChip({
         "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors disabled:pointer-events-none disabled:opacity-40",
         active
           ? "bg-[hsl(var(--neon-blue)/0.16)] text-[hsl(var(--neon-blue))] ring-[hsl(var(--neon-blue)/0.4)]"
-          : "text-muted-foreground ring-white/10 hover:bg-white/5 hover:text-foreground",
+          : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
       )}
     >
       {children}

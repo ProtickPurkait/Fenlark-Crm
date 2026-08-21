@@ -15,9 +15,8 @@ const LABELS: Record<LeadStatus, string> = {
   dead: "Dead",
 };
 
-// Neon-on-dark: a tinted translucent fill, a matching 1px ring, and the pure
-// accent for the text itself. The ring is what makes it glow rather than just
-// sit there.
+// A tinted translucent fill, a matching 1px ring, and the pure accent colour
+// for the text itself — reads as a status pill, not a decorative badge.
 const STYLES: Record<LeadStatus, string> = {
   new: "bg-[hsl(var(--status-new)/0.14)] text-[hsl(var(--status-new))] ring-[hsl(var(--status-new)/0.35)]",
   attempted:
@@ -55,7 +54,7 @@ export function LeadStatusBadge({
     >
       <span
         aria-hidden
-        className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_6px_currentColor]"
+        className="h-1.5 w-1.5 rounded-full bg-current"
       />
       {LABELS[status]}
     </motion.span>

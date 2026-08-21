@@ -18,12 +18,12 @@ const SelectTrigger = React.forwardRef<
     className={cn(
       // Taller + 16px text on mobile: touch-target size, and matching the
       // inputs so the status picker and the remark field line up visually.
-      "flex h-11 w-full items-center justify-between whitespace-nowrap rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-base backdrop-blur-md transition-all sm:h-10 sm:text-sm",
-      "hover:border-white/20 hover:bg-white/[0.07]",
+      "flex h-11 w-full items-center justify-between whitespace-nowrap rounded-lg border border-input bg-card px-3 py-2 text-base transition-colors sm:h-10 sm:text-sm",
+      "hover:border-foreground/20",
       "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background",
-      // The trigger lights up while its menu is open — the micro-interaction
-      // on the status select.
-      "data-[state=open]:border-[hsl(var(--neon-blue)/0.5)] data-[state=open]:shadow-glow-soft",
+      // The trigger's border picks up the accent while its menu is open — the
+      // micro-interaction on the status select.
+      "data-[state=open]:border-[hsl(var(--neon-blue)/0.5)]",
       "disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
       className,
     )}
@@ -76,7 +76,7 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex w-full cursor-pointer select-none items-center rounded-md py-2 pl-8 pr-2 text-sm outline-none transition-colors",
-      "focus:bg-white/10 focus:text-foreground data-[state=checked]:text-[hsl(var(--neon-blue))]",
+      "focus:bg-accent focus:text-foreground data-[state=checked]:text-[hsl(var(--neon-blue))]",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}

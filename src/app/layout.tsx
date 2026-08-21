@@ -1,6 +1,18 @@
 import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegistrar } from "@/components/pwa/service-worker-registrar";
+
+const fontSans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+const fontMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 // Without this, mobile browsers assume a ~980px desktop canvas and zoom the
 // whole page out — every screen renders unreadably small before a single CSS
@@ -13,7 +25,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // Tints the Android status bar and the iOS standalone header to match the
   // app background, so an installed Trace looks native rather than framed.
-  themeColor: "#030711",
+  themeColor: "#F4F5F7",
   // Deliberately NOT setting maximumScale/userScalable: blocking pinch-zoom is
   // an accessibility failure. The iOS focus-zoom problem is solved properly by
   // giving inputs a >=16px font size (see ui/input.tsx), not by disabling zoom.
@@ -49,8 +61,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Trace",
-    // The app paints its own dark background behind the status bar.
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
   },
 };
 
@@ -58,12 +69,15 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    // Dark is forced rather than toggled: this is a dark-only product, and
+    // Light is forced rather than toggled: this is a light-only product, and
     // `colorScheme` makes the browser render native controls (scrollbars, the
-    // datetime-local picker in the disposition drawer) in dark too — without
-    // it those render as bright white boxes against the glass panels.
-    <html lang="en" className="dark" style={{ colorScheme: "dark" }}>
-      <body className="min-h-svh antialiased">
+    // datetime-local picker in the disposition drawer) in light too.
+    <html
+      lang="en"
+      className={`${fontSans.variable} ${fontMono.variable}`}
+      style={{ colorScheme: "light" }}
+    >
+      <body className="min-h-svh font-sans antialiased">
         {children}
         <ServiceWorkerRegistrar />
       </body>

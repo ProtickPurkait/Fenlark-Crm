@@ -99,7 +99,7 @@ export function RejectionBell() {
         type="button"
         aria-label="Rejection notifications"
         onClick={() => setOpen((v) => !v)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <Bell className="h-4 w-4" />
         {rejections.length > 0 && (
@@ -151,7 +151,7 @@ export function RejectionBell() {
                           onClick={() => dismiss(r.id)}
                           disabled={busyId === r.id}
                           className={cn(
-                            "shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground",
+                            "shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
                             busyId === r.id && "opacity-50",
                           )}
                           aria-label="Dismiss"

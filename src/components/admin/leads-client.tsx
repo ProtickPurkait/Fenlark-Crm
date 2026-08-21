@@ -292,7 +292,7 @@ export function LeadsClient({
           </FilterChip>
         ))}
 
-        <span className="mx-1 h-4 w-px bg-white/10" aria-hidden />
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
 
         <FilterChip
           active={filters.assignment === "all"}
@@ -332,7 +332,7 @@ export function LeadsClient({
           ))}
         </div>
 
-        <span className="h-4 w-px bg-white/10" aria-hidden />
+        <span className="h-4 w-px bg-border" aria-hidden />
 
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Sort</span>
@@ -358,7 +358,7 @@ export function LeadsClient({
             <span className="text-sm font-medium">
               {selected.size} selected
             </span>
-            <div className="mx-1 h-4 w-px bg-white/10" aria-hidden />
+            <div className="mx-1 h-4 w-px bg-border" aria-hidden />
 
             <AssignMenu telecallers={telecallers} onAssign={assignTo} disabled={busy} />
 
@@ -422,7 +422,7 @@ export function LeadsClient({
                   exit={{ opacity: 0, height: 0 }}
                   className="w-full overflow-hidden"
                 >
-                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
                     <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--neon-rose))]" />
                     <span className="text-sm">
                       Permanently delete {selected.size} lead
@@ -495,7 +495,7 @@ export function LeadsClient({
                   <span className="font-medium tracking-tight">{lead.full_name}</span>
                   <LeadStatusBadge status={lead.status} />
                   {lead.business_type && (
-                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
                       {lead.business_type}
                     </span>
                   )}
@@ -544,7 +544,7 @@ export function LeadsClient({
         <div className="overflow-x-auto scrollbar-slim">
           <table className="w-full min-w-[62rem] text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                 <th className="w-10 px-4 py-3">
                   <Checkbox checked={allSelected} onChange={toggleAll} />
                 </th>
@@ -560,7 +560,7 @@ export function LeadsClient({
                 <tr
                   key={lead.id}
                   className={cn(
-                    "border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.03]",
+                    "border-b border-border transition-colors last:border-0 hover:bg-foreground/[0.03]",
                     selected.has(lead.id) && "bg-[hsl(var(--neon-blue)/0.06)]",
                   )}
                 >
@@ -574,7 +574,7 @@ export function LeadsClient({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium tracking-tight">{lead.full_name}</span>
                       {lead.business_type && (
-                        <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
                           {lead.business_type}
                         </span>
                       )}
@@ -675,7 +675,7 @@ function FilterChip({
         "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
         active
           ? "bg-[hsl(var(--neon-blue)/0.16)] text-[hsl(var(--neon-blue))] ring-[hsl(var(--neon-blue)/0.4)]"
-          : "text-muted-foreground ring-white/10 hover:bg-white/5 hover:text-foreground",
+          : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
       )}
     >
       {children}
@@ -700,7 +700,7 @@ function Checkbox({
         "flex h-4 w-4 items-center justify-center rounded border transition-colors",
         checked
           ? "border-[hsl(var(--neon-blue))] bg-[hsl(var(--neon-blue))]"
-          : "border-white/20 hover:border-white/40",
+          : "border-input hover:border-foreground/30",
       )}
     >
       {checked && (
@@ -789,7 +789,7 @@ function AssignMenu({
                         setOpen(false);
                         onAssign(t.id);
                       }}
-                      className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"
+                      className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-accent"
                     >
                       {t.full_name}
                     </button>

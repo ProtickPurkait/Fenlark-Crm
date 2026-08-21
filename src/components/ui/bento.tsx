@@ -79,16 +79,7 @@ export function BentoCard({
       variants={staggerTile}
       onMouseMove={handleMouseMove}
       whileHover={{ y: -3, transition: springSoft }}
-      className={cn(
-        "group relative overflow-hidden rounded-2xl",
-        "glass transition-shadow duration-300",
-        glow === "blue" && "hover:shadow-glow-blue",
-        glow === "emerald" && "hover:shadow-glow-emerald",
-        glow === "violet" && "hover:shadow-glow-violet",
-        glow === "rose" && "hover:shadow-glow-rose",
-        span,
-        className,
-      )}
+      className={cn("group relative overflow-hidden rounded-2xl glass", span, className)}
       {...(props as React.ComponentProps<typeof motion.div>)}
     >
       {spotlight && (

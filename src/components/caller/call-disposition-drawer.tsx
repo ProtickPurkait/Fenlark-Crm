@@ -252,7 +252,7 @@ export function CallDispositionDrawer({
                 supported" rather than "not filled in yet". */}
             <motion.div
               variants={staggerItem}
-              className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-white/5 p-3"
+              className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted p-3"
             >
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -350,7 +350,7 @@ export function CallDispositionDrawer({
               beside the lead in the queue list. */}
           <motion.div variants={staggerItem}>
             {saleStatus ? (
-              <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2.5">
                 <span className="text-xs text-muted-foreground">Sale status</span>
                 <SaleStatusBadge status={saleStatus} />
               </div>
@@ -418,12 +418,12 @@ export function CallDispositionDrawer({
                 animate={
                   requiresSchedule && !scheduledAt
                     ? { borderColor: "hsl(var(--neon-rose) / 0.5)" }
-                    : { borderColor: "hsl(0 0% 100% / 0.1)" }
+                    : { borderColor: "hsl(var(--border))" }
                 }
                 transition={springSnappy}
                 // h-11/text-base on mobile matches ui/input.tsx — a
                 // datetime-local under 16px triggers the same iOS focus-zoom.
-                className="flex h-11 w-full rounded-lg border bg-white/5 px-3 text-base backdrop-blur-md transition-colors hover:border-white/20 focus-visible:border-[hsl(var(--neon-blue)/0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-10 sm:text-sm [color-scheme:dark]"
+                className="flex h-11 w-full rounded-lg border bg-card px-3 text-base transition-colors hover:border-foreground/20 focus-visible:border-[hsl(var(--neon-blue)/0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-10 sm:text-sm [color-scheme:light]"
               />
             </motion.div>
 
@@ -460,7 +460,7 @@ export function CallDispositionDrawer({
                       onChange={(e) =>
                         setCallSeconds(Math.max(0, Number(e.target.value) || 0))
                       }
-                      className="h-9 w-20 shrink-0 rounded-md border border-white/10 bg-white/5 px-2 text-center font-mono text-sm [color-scheme:dark]"
+                      className="h-9 w-20 shrink-0 rounded-md border border-border bg-card px-2 text-center font-mono text-sm [color-scheme:light]"
                     />
                     <span className="shrink-0 text-xs text-muted-foreground">sec</span>
                   </div>
@@ -543,7 +543,7 @@ export function CallDispositionDrawer({
             </motion.div>
           </form>
 
-          <motion.div variants={staggerItem} className="border-t border-white/10 pt-4">
+          <motion.div variants={staggerItem} className="border-t border-border pt-4">
             <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Audit History
             </h4>

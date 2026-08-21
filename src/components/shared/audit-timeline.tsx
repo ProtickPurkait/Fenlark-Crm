@@ -121,7 +121,7 @@ export function AuditTimeline({ leadId, refreshKey }: AuditTimelineProps) {
         <motion.li
           key={log.id}
           variants={staggerItem}
-          className="relative border-l border-white/10 pl-4 text-sm"
+          className="relative border-l border-border pl-4 text-sm"
         >
           <span
             aria-hidden
@@ -144,7 +144,7 @@ export function AuditTimeline({ leadId, refreshKey }: AuditTimelineProps) {
             )}
           </div>
           {log.remark && (
-            <p className="mt-1 rounded-md border border-white/5 bg-white/[0.03] px-2 py-1.5 text-foreground/80">
+            <p className="mt-1 rounded-md border border-border bg-muted px-2 py-1.5 text-foreground/80">
               {log.remark}
             </p>
           )}

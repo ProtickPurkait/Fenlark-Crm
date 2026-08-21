@@ -14,13 +14,12 @@ const motionButtonVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-glow-soft hover:bg-primary/90 hover:shadow-glow-blue",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
         glass:
-          "border border-white/10 bg-white/5 text-foreground backdrop-blur-md hover:border-white/20 hover:bg-white/10",
+          "border border-border bg-card text-foreground hover:bg-accent",
         emerald:
-          "border border-[hsl(var(--neon-emerald)/0.3)] bg-[hsl(var(--neon-emerald)/0.12)] text-[hsl(var(--neon-emerald))] hover:bg-[hsl(var(--neon-emerald)/0.2)] hover:shadow-glow-emerald",
-        ghost: "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          "border border-[hsl(var(--neon-emerald)/0.3)] bg-[hsl(var(--neon-emerald)/0.12)] text-[hsl(var(--neon-emerald))] hover:bg-[hsl(var(--neon-emerald)/0.2)]",
+        ghost: "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
         destructive:
           "border border-[hsl(var(--neon-rose)/0.3)] bg-[hsl(var(--neon-rose)/0.12)] text-[hsl(var(--neon-rose))] hover:bg-[hsl(var(--neon-rose)/0.2)]",
       },

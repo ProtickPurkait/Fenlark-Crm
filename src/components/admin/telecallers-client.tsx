@@ -227,7 +227,7 @@ export function TelecallersClient({
                           ? role === "admin"
                             ? "bg-[hsl(var(--neon-violet)/0.16)] text-[hsl(var(--neon-violet))] ring-[hsl(var(--neon-violet)/0.4)]"
                             : "bg-[hsl(var(--neon-blue)/0.16)] text-[hsl(var(--neon-blue))] ring-[hsl(var(--neon-blue)/0.4)]"
-                          : "text-muted-foreground ring-white/10",
+                          : "text-muted-foreground ring-border",
                         blocked && !selectedRole && "cursor-not-allowed opacity-40",
                       )}
                     >
@@ -240,7 +240,7 @@ export function TelecallersClient({
                 </span>
               </div>
 
-              <div className="mt-3 border-t border-white/5 pt-3">
+              <div className="mt-3 border-t border-border pt-3">
                 {confirming ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-[hsl(var(--neon-rose))]">
@@ -295,7 +295,7 @@ export function TelecallersClient({
         <div className="overflow-x-auto scrollbar-slim">
           <table className="w-full min-w-[52rem] text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 text-right font-medium">Assigned</th>
@@ -322,7 +322,7 @@ export function TelecallersClient({
                   <tr
                     key={row.id}
                     className={cn(
-                      "border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.03]",
+                      "border-b border-border transition-colors last:border-0 hover:bg-foreground/[0.03]",
                       !row.is_active && "opacity-55",
                       confirming && "bg-[hsl(var(--neon-rose)/0.05)]",
                     )}
@@ -362,7 +362,7 @@ export function TelecallersClient({
                                   ? role === "admin"
                                     ? "bg-[hsl(var(--neon-violet)/0.16)] text-[hsl(var(--neon-violet))] ring-[hsl(var(--neon-violet)/0.4)]"
                                     : "bg-[hsl(var(--neon-blue)/0.16)] text-[hsl(var(--neon-blue))] ring-[hsl(var(--neon-blue)/0.4)]"
-                                  : "text-muted-foreground ring-white/10 hover:bg-white/5 hover:text-foreground",
+                                  : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
                                 blocked && !selected && "cursor-not-allowed opacity-40",
                               )}
                             >
@@ -563,7 +563,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
           emailed. This password won&apos;t be shown again after you leave this
           screen.
         </p>
-        <div className="space-y-1 rounded-lg border border-white/10 bg-white/[0.03] p-3 font-mono text-sm">
+        <div className="space-y-1 rounded-lg border border-border bg-muted p-3 font-mono text-sm">
           <div>
             <span className="text-muted-foreground">Email: </span>
             {created.email}

@@ -12,9 +12,9 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           // both mobile-specific: iOS Safari force-zooms the page on focus for
           // any input under 16px (text-base), and 44px is the minimum
           // comfortable touch target. Desktop keeps the tighter original.
-          "flex h-11 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-base backdrop-blur-md transition-all sm:h-10 sm:text-sm",
+          "flex h-11 w-full rounded-lg border border-input bg-card px-3 py-1 text-base transition-colors sm:h-10 sm:text-sm",
           "file:border-0 file:bg-transparent file:text-sm file:font-medium",
-          "placeholder:text-muted-foreground/70 hover:border-white/20",
+          "placeholder:text-muted-foreground/70 hover:border-foreground/20",
           "focus-visible:border-[hsl(var(--neon-blue)/0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "disabled:cursor-not-allowed disabled:opacity-50",
           className,

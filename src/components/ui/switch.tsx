@@ -42,8 +42,8 @@ export function Switch({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "disabled:cursor-not-allowed disabled:opacity-50",
         checked
-          ? "border-[hsl(var(--neon-emerald)/0.45)] bg-[hsl(var(--neon-emerald)/0.22)] shadow-glow-emerald"
-          : "border-white/10 bg-white/5",
+          ? "border-[hsl(var(--neon-emerald)/0.45)] bg-[hsl(var(--neon-emerald)/0.22)]"
+          : "border-border bg-muted",
         className,
       )}
     >

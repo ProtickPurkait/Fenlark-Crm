@@ -203,7 +203,7 @@ export function SalesApprovalClient({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium tracking-tight">{row.lead_name}</span>
                   {row.business_type && (
-                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
                       {row.business_type}
                     </span>
                   )}
@@ -270,7 +270,7 @@ export function SalesApprovalClient({
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+                  <div className="mt-3 space-y-2 border-t border-border pt-3">
                     <Textarea
                       rows={2}
                       value={reason}
@@ -363,7 +363,7 @@ function FilterChip({
         "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
         active
           ? "bg-[hsl(var(--neon-blue)/0.16)] text-[hsl(var(--neon-blue))] ring-[hsl(var(--neon-blue)/0.4)]"
-          : "text-muted-foreground ring-white/10 hover:bg-white/5 hover:text-foreground",
+          : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
       )}
     >
       {children}

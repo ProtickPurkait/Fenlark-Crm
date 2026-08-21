@@ -36,7 +36,7 @@ export function LeadImportPanel({
       className="glass rounded-2xl p-5"
     >
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-lg border border-white/10 bg-white/[0.03] p-1">
+        <div className="flex gap-1 rounded-lg border border-border bg-muted p-1">
           {(["csv", "manual"] as const).map((m) => (
             <button
               key={m}
@@ -45,7 +45,7 @@ export function LeadImportPanel({
               className={cn(
                 "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                 mode === m
-                  ? "bg-white/10 text-foreground"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -237,7 +237,7 @@ function CsvImport({ onImported }: { onImported: () => void }) {
               const f = e.target.files?.[0];
               if (f) handleFile(f);
             }}
-            className="block w-full max-w-md text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border file:border-white/10 file:bg-white/5 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-white/10"
+            className="block w-full max-w-md text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border file:border-border file:bg-card file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-accent"
           />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
@@ -258,7 +258,7 @@ function CsvImport({ onImported }: { onImported: () => void }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={springSoft}
-            className="rounded-lg border border-white/10 bg-white/[0.03] p-4"
+            className="rounded-lg border border-border bg-muted p-4"
           >
             <p className="text-sm font-medium">
               {fileName} — {parsed.rows.length} row

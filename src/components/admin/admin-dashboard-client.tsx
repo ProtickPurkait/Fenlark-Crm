@@ -155,7 +155,7 @@ export function AdminDashboardClient({
             {data.convertedCount} of {data.totalLeads} leads converted
           </p>
 
-          <div className="mt-5 border-t border-white/10 pt-4">
+          <div className="mt-5 border-t border-border pt-4">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <RefreshCw className="h-3 w-3" />
@@ -166,12 +166,12 @@ export function AdminDashboardClient({
                   "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1",
                   data.slaEnabled
                     ? "bg-[hsl(var(--neon-emerald)/0.14)] text-[hsl(var(--neon-emerald))] ring-[hsl(var(--neon-emerald)/0.35)]"
-                    : "bg-white/5 text-muted-foreground ring-white/10",
+                    : "bg-muted text-muted-foreground ring-border",
                 )}
               >
                 <span
                   aria-hidden
-                  className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_6px_currentColor]"
+                  className="h-1.5 w-1.5 rounded-full bg-current"
                 />
                 {data.slaEnabled ? `On · ${data.slaHours}h` : "Off"}
               </span>
@@ -217,7 +217,7 @@ export function AdminDashboardClient({
               variants={staggerContainer(0.04, 0.2)}
               initial="hidden"
               animate="show"
-              className="divide-y divide-white/5"
+              className="divide-y divide-border"
             >
               {data.recent.map((item) => (
                 // Stacks into two lines on phones. As one row it does not fit:
@@ -357,7 +357,7 @@ function AnimatedNumber({
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 px-6 py-10 text-center">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 py-10 text-center">
       <p className="text-sm font-medium text-foreground/80">{title}</p>
       <p className="mt-1 max-w-sm text-xs text-muted-foreground">{body}</p>
     </div>

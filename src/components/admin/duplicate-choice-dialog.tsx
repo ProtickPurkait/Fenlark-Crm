@@ -61,7 +61,7 @@ export function DuplicateChoiceDialog({
           </SheetDescription>
         </SheetHeader>
 
-        <ul className="scrollbar-slim max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm">
+        <ul className="scrollbar-slim max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-border bg-muted p-3 text-sm">
           {preview.map((m) => (
             <li key={m.existing_lead_id} className="flex items-center justify-between gap-3">
               <span className="truncate">{m.existing_full_name}</span>

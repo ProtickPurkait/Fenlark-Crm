@@ -20,13 +20,13 @@ export function Skeleton({
       role="presentation"
       aria-hidden="true"
       className={cn(
-        "relative overflow-hidden rounded-md bg-white/[0.06]",
+        "relative overflow-hidden rounded-md bg-foreground/[0.06]",
         className,
       )}
       {...props}
     >
       <motion.div
-        className="absolute inset-y-0 -left-full w-full bg-gradient-to-r from-transparent via-white/[0.09] to-transparent"
+        className="absolute inset-y-0 -left-full w-full bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
         animate={{ x: ["0%", "200%"] }}
         transition={{
           duration: 1.6,
@@ -73,7 +73,7 @@ export function TimelineSkeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="space-y-4">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="border-l-2 border-white/10 pl-3">
+        <div key={i} className="border-l-2 border-border pl-3">
           <div className="flex items-baseline justify-between gap-2">
             <Skeleton className="h-3.5 w-44" />
             <Skeleton className="h-3 w-24" />

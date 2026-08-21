@@ -121,7 +121,7 @@ export function InstallPrompt() {
               type="button"
               onClick={close}
               aria-label="Dismiss"
-              className="absolute right-2 top-2 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+              className="absolute right-2 top-2 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
@@ -136,7 +136,7 @@ export function InstallPrompt() {
                   <span>Tap</span>
                   <Share className="inline h-3.5 w-3.5 text-[hsl(var(--neon-blue))]" />
                   <span>then</span>
-                  <span className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-foreground/80">
+                  <span className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-foreground/80">
                     <Plus className="h-3 w-3" />
                     Add to Home Screen
                   </span>

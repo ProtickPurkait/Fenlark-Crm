@@ -26,7 +26,7 @@ function PageHeaderSkeleton({ wide = false }: { wide?: boolean }) {
 function TableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
     <div className="glass overflow-hidden rounded-2xl">
-      <div className="space-y-0 divide-y divide-white/5">
+      <div className="space-y-0 divide-y divide-border">
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 p-4">
             <div className="min-w-0 flex-1 space-y-2">
@@ -100,7 +100,7 @@ export function HistoryPageSkeleton() {
       <Skeleton className="h-7 w-32" />
       <div className="glass space-y-4 rounded-2xl p-5">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="border-l-2 border-white/10 pl-3">
+          <div key={i} className="border-l-2 border-border pl-3">
             <div className="flex items-baseline justify-between gap-2">
               <Skeleton className="h-3.5 w-44" />
               <Skeleton className="h-3 w-24" />

@@ -18,9 +18,9 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
-      // Heavy frosted backdrop: the page behind stays legible as shape and
-      // colour but is pushed fully out of focus.
-      "fixed inset-0 z-50 bg-background/50 backdrop-blur-md backdrop-saturate-150",
+      // A dark scrim behind the sheet, same idea regardless of app theme —
+      // the page behind stays visible as shape but pushed out of focus.
+      "fixed inset-0 z-50 bg-black/45",
       "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
@@ -83,11 +83,11 @@ const SheetContent = React.forwardRef<
       {(side === "responsive" || side === "bottom") && (
         <div
           aria-hidden
-          className="mx-auto -mt-1 mb-1 h-1 w-9 shrink-0 rounded-full bg-white/20 sm:hidden"
+          className="mx-auto -mt-1 mb-1 h-1 w-9 shrink-0 rounded-full bg-foreground/15 sm:hidden"
         />
       )}
       {children}
-      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-md border border-white/10 bg-white/5 p-2 text-muted-foreground transition-all hover:border-white/20 hover:bg-white/10 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background active:scale-95 disabled:pointer-events-none sm:p-1.5">
+      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-md border border-border bg-card p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background active:scale-95 disabled:pointer-events-none sm:p-1.5">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </SheetPrimitive.Close>

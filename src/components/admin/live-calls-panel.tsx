@@ -141,7 +141,7 @@ export function LiveCallsPanel({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-xs text-muted-foreground"
+              className="rounded-xl border border-border bg-muted px-4 py-6 text-center text-xs text-muted-foreground"
             >
               No calls in progress.
             </motion.p>
@@ -190,7 +190,7 @@ export function LiveCallsPanel({
       </div>
 
       {/* ---------------- Today ---------------- */}
-      <div className="border-t border-white/5 pt-4">
+      <div className="border-t border-border pt-4">
         <div className="mb-3 flex items-baseline justify-between gap-2">
           <h2 className="text-sm font-medium">Talk time today</h2>
           <span className="text-xs text-muted-foreground">
@@ -201,7 +201,7 @@ export function LiveCallsPanel({
         </div>
 
         {stats.length === 0 ? (
-          <p className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-xs text-muted-foreground">
+          <p className="rounded-xl border border-border bg-muted px-4 py-6 text-center text-xs text-muted-foreground">
             No calls logged today yet.
           </p>
         ) : (
@@ -219,7 +219,7 @@ export function LiveCallsPanel({
                       {s.calls_today} · {formatDurationLabel(s.talk_seconds)}
                     </span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                     <motion.div
                       className={cn(
                         "h-full rounded-full",

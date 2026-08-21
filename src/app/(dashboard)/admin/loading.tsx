@@ -38,7 +38,7 @@ export default function AdminDashboardLoading() {
           <Skeleton className="h-4 w-24" />
           <Skeleton className="mt-4 h-10 w-28" />
           <Skeleton className="mt-2 h-3 w-40" />
-          <div className="mt-6 border-t border-white/10 pt-4">
+          <div className="mt-6 border-t border-border pt-4">
             <Skeleton className="h-3 w-full" />
           </div>
         </div>

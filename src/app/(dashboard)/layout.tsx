@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/shared/sign-out-button";
 import { RejectionBell } from "@/components/caller/rejection-bell";
@@ -10,6 +11,7 @@ import {
 } from "@/components/shared/dashboard-nav";
 import { Logo } from "@/components/brand/logo";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { AdminSidebar } from "@/components/admin/admin-sidebar";
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: "dashboard", shortLabel: "Home" },
@@ -76,14 +78,23 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-svh">
-      {/* Sticky frosted navbar — the page content blurs as it scrolls under.
-          pt-[env(safe-area-inset-top)] keeps it clear of the notch when the
-          installed PWA runs full-screen. */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-background/70 pt-[env(safe-area-inset-top)] backdrop-blur-xl backdrop-saturate-150">
+      {isAdmin && <AdminSidebar items={navItems} displayName={displayName} />}
+
+      {/* Sticky header. Admins get it only below `md:` — the rail carries
+          the logo/name/sign-out from there up, so a second copy in a top bar
+          would be redundant on desktop. Telecallers always see it; they
+          never get a sidebar. pt-[env(safe-area-inset-top)] keeps it clear
+          of the notch when the installed PWA runs full-screen. */}
+      <header
+        className={cn(
+          "sticky top-0 z-40 border-b border-border bg-card pt-[env(safe-area-inset-top)]",
+          isAdmin && "md:hidden",
+        )}
+      >
         <div className="flex h-14 items-center justify-between gap-3 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-6">
             <Logo className="shrink-0 text-sm" />
-            <DashboardNav items={navItems} />
+            {!isAdmin && <DashboardNav items={navItems} />}
           </div>
 
           <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
@@ -102,8 +113,16 @@ export default async function DashboardLayout({
       </header>
 
       {/* pb-20 on mobile clears the fixed bottom tab bar; sm: drops it since
-          the tab bar is hidden from that breakpoint up. */}
-      <main className="mx-auto max-w-7xl p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
+          the tab bar is hidden from that breakpoint up. Admin content clears
+          the fixed rail from md: up. */}
+      <main
+        className={cn(
+          "mx-auto max-w-7xl p-4 pb-20 sm:p-6 sm:pb-6",
+          isAdmin && "md:pl-56",
+        )}
+      >
+        {children}
+      </main>
 
       <MobileTabBar items={navItems} />
       <InstallPrompt />

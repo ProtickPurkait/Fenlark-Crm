@@ -37,7 +37,7 @@ export interface NavItem {
 // Mapped by name rather than passing component references as props: nav items
 // are defined in the server-rendered layout, and a function/component cannot
 // cross the RSC boundary.
-const ICONS: Record<NavIcon, LucideIcon> = {
+export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   dashboard: LayoutDashboard,
   leads: ListChecks,
   telecallers: Users,
@@ -82,7 +82,7 @@ export function DashboardNav({ items }: { items: NavItem[] }) {
             {active && (
               <motion.span
                 layoutId="nav-active-pill"
-                className="absolute inset-0 rounded-lg border border-white/10 bg-white/[0.07]"
+                className="absolute inset-0 rounded-lg border border-border bg-foreground/[0.05]"
                 transition={{ type: "spring", stiffness: 380, damping: 32 }}
               />
             )}
@@ -109,12 +109,12 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-background/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl backdrop-saturate-150 sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] sm:hidden"
     >
       <div className="flex items-stretch justify-around">
         {items.map((item) => {
           const active = isActive(item.href);
-          const Icon = ICONS[item.icon];
+          const Icon = NAV_ICONS[item.icon];
           return (
             <Link
               key={item.href}

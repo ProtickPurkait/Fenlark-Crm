@@ -136,12 +136,7 @@ export function CallerQueueClient({
                   setSelected(lead);
                   setDrawerOpen(true);
                 }}
-                className={cn(
-                  "glass group cursor-pointer rounded-xl p-4 transition-shadow duration-300",
-                  lead.follow_up_bucket === "overdue"
-                    ? "hover:shadow-glow-rose"
-                    : "hover:shadow-glow-blue",
-                )}
+                className="glass group cursor-pointer rounded-xl p-4"
               >
                 {/* Stacks on phones so the lead details get full width and the
                     WhatsApp button becomes a full-width row beneath, rather
@@ -155,7 +150,7 @@ export function CallerQueueClient({
                       <LeadStatusBadge status={lead.status} />
                       <FollowUpBadge bucket={lead.follow_up_bucket} />
                       {lead.business_type && (
-                        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-white/10">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
                           {lead.business_type}
                         </span>
                       )}
