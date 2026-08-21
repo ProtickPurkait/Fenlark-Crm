@@ -51,7 +51,7 @@ sales).
 
 - Path: `C:\Users\Protick's Laptop\Desktop\claude\fenlark-crm\` (Windows).
 - Git remote: `https://github.com/ProtickPurkait/Fenlark-Crm.git`, branch
-  `main`. Working tree is clean as of this handoff (last commit `55b8dad`).
+  `main`. Working tree is clean as of this handoff (last commit `7eb1c07`).
 - `.env.local` (gitignored) needs three vars — see `.env.local.example`:
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`. The service role key is server-only, imported
@@ -543,4 +543,6 @@ hard way. Updated same day after a follow-up session added permanent lead
 delete + the pre-import duplicate check (commit `5cde36f`), then again after a
 session that fixed the telecaller mobile layout, moved Log Sale into the
 drawer, and fixed `lead_queue` silently omitting business_type/address
-(commit `55b8dad`) — see §9 for that bug and the pending live-DB step in §6.*
+(commit `55b8dad`), then again after a full light-theme redesign replaced the
+dark glass/neon-glow identity app-wide (commit `7eb1c07`) — see §6 for what
+changed and what still needs a real-login check.*
