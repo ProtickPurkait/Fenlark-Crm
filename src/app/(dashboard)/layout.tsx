@@ -23,12 +23,14 @@ const ADMIN_NAV: NavItem[] = [
     shortLabel: "Callers",
   },
   { href: "/admin/sales", label: "Sales", icon: "sales" },
+  { href: "/admin/reports", label: "Reports", icon: "report" },
   { href: "/admin/settings", label: "Settings", icon: "settings" },
 ];
 
 const CALLER_NAV: NavItem[] = [
   { href: "/caller", label: "My Queue", icon: "queue", shortLabel: "Queue" },
   { href: "/caller/history", label: "History", icon: "history" },
+  { href: "/caller/report", label: "Daily Report", icon: "report", shortLabel: "Report" },
   { href: "/caller/earnings", label: "Earnings", icon: "earnings" },
 ];
 
