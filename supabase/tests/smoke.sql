@@ -968,7 +968,136 @@ reset role;
 
 
 -- ===========================================================================
-select public.zz_section('13. Anonymous access');
+select public.zz_section('13. Attendance & daily report');
+-- ===========================================================================
+-- (now() at time zone 'Asia/Kolkata')::date, not current_date: the RPCs under
+-- test resolve "today" against system_settings.report_timezone (IST), and
+-- current_date alone would drift a day out of sync with them for ~5.5 hours
+-- of every UTC day, making this section flaky depending on when it runs.
+
+-- Fresh leads rather than reusing d1/d2: by this point in the file d1 is
+-- archived and d3 is hard-deleted (section 12), and this section should not
+-- depend on exactly what state earlier sections happen to leave behind.
+insert into public.leads (id, full_name, phone, status, assigned_to, assigned_at, source) values
+  ('00000000-0000-0000-0000-0000000000e1', 'Report Lead One', '9822200001', 'new',       '00000000-0000-0000-0000-0000000000c1', now(), 'manual'),
+  ('00000000-0000-0000-0000-0000000000e2', 'Report Lead Two', '9822200002', 'attempted', '00000000-0000-0000-0000-0000000000c1', now(), 'manual');
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+
+select public.caller_clock_in();
+
+select public.zz_expect(
+  (select clock_out_at is null from public.attendance
+    where telecaller_id = '00000000-0000-0000-0000-0000000000c1'
+      and work_date = (now() at time zone 'Asia/Kolkata')::date),
+  'caller_clock_in() opens today''s shift with clock_out_at still null');
+
+select public.zz_expect_error(
+  $q$select public.caller_clock_in()$q$,
+  'clocking in a second time the same day is rejected');
+
+-- Snapshotted before this section's own activity, and compared as a delta
+-- below rather than against absolute numbers: the whole file runs inside one
+-- transaction with now() fixed at its start, so c1's sale from section 10 and
+-- any earlier reschedule/warm activity of theirs already fall inside "today"
+-- and would otherwise be double-counted into this section's expectations.
+create temporary table zz_before as
+  select * from public.my_daily_report_summary((now() at time zone 'Asia/Kolkata')::date);
+
+-- Generates the activity my_daily_report_summary() should pick up: e1 warm
+-- today, e2 rescheduled to a future date today, and a sale on e1 — which also
+-- converts it and clears its scheduled_at (see caller_log_sale()), so it must
+-- not count toward the appointments backlog even though it once had a date.
+select public.log_call_interaction(
+  '00000000-0000-0000-0000-0000000000e1', 'warm', 'Interested, following up.');
+select public.log_call_interaction(
+  '00000000-0000-0000-0000-0000000000e2', 'rescheduled', 'Asked to call back.',
+  now() + interval '2 days');
+select public.caller_log_sale(
+  '00000000-0000-0000-0000-0000000000e1', 'Closed over the phone.');
+
+select public.zz_expect(
+  (select
+     jsonb_array_length(n.warm_leads)   = jsonb_array_length(b.warm_leads) + 1
+     and jsonb_array_length(n.converted)    = jsonb_array_length(b.converted) + 1
+     and jsonb_array_length(n.schedules)    = jsonb_array_length(b.schedules) + 1
+     and jsonb_array_length(n.appointments) = jsonb_array_length(b.appointments) + 1
+   from public.my_daily_report_summary((now() at time zone 'Asia/Kolkata')::date) n, zz_before b),
+  'my_daily_report_summary() picks up exactly this section''s new warm/converted/'
+  'scheduled activity and appointment, on top of whatever came before it');
+
+select public.zz_expect(
+  (select
+     n.warm_leads   @> '[{"full_name": "Report Lead One"}]'::jsonb
+     and n.converted    @> '[{"full_name": "Report Lead One"}]'::jsonb
+     and n.schedules    @> '[{"full_name": "Report Lead Two"}]'::jsonb
+     and n.appointments @> '[{"full_name": "Report Lead Two"}]'::jsonb
+     and not (n.appointments @> '[{"full_name": "Report Lead One"}]'::jsonb)
+   from public.my_daily_report_summary((now() at time zone 'Asia/Kolkata')::date) n),
+  'each list names the actual lead behind it, and a converted lead does not '
+  'linger in the appointments backlog');
+
+select public.caller_clock_out();
+
+select public.zz_expect(
+  (select clock_out_at is not null from public.attendance
+    where telecaller_id = '00000000-0000-0000-0000-0000000000c1'
+      and work_date = (now() at time zone 'Asia/Kolkata')::date),
+  'caller_clock_out() closes the shift');
+
+select public.zz_expect_error(
+  $q$select public.caller_clock_out()$q$,
+  'clocking out with no active clock-in is rejected');
+
+-- RLS: a telecaller sees only their own attendance, never a colleague's.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c2"}', true);
+
+select public.zz_expect(
+  (select count(*) from public.attendance
+    where telecaller_id = '00000000-0000-0000-0000-0000000000c1') = 0,
+  'a telecaller cannot see another telecaller''s attendance row');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+select public.zz_expect(
+  (select count(*) from public.attendance
+    where telecaller_id = '00000000-0000-0000-0000-0000000000c1') = 1,
+  'an admin can see every telecaller''s attendance');
+
+-- Settings: the WhatsApp destination number and report template, including
+-- the clear-to-null path — unlike the other text fields on this RPC, an empty
+-- string here is a deliberate "unset it", not "leave it alone".
+select public.admin_update_settings(null, null, null, '+91 90000 00000', 'Report for {{agent}} on {{date}}');
+
+select public.zz_expect(
+  (select admin_whatsapp_number = '+91 90000 00000'
+      and daily_report_template = 'Report for {{agent}} on {{date}}'
+     from public.system_settings where id = true),
+  'admin_update_settings() saves the WhatsApp number and report template');
+
+select public.admin_update_settings(null, null, null, '', null);
+
+select public.zz_expect(
+  (select admin_whatsapp_number is null from public.system_settings where id = true),
+  'admin_update_settings() clears the WhatsApp number back to null on an empty string');
+
+select public.zz_expect(
+  (select admin_whatsapp_number is null and daily_report_template is not null
+     from public.app_settings),
+  'app_settings exposes both fields to telecallers without exposing the rest of the row');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+
+select public.zz_expect_error(
+  $q$select public.admin_update_settings(null, null, null, '+91 90000 00000', null)$q$,
+  'a telecaller cannot change the WhatsApp report settings');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('14. Anonymous access');
 -- ===========================================================================
 
 reset role;

@@ -64,6 +64,14 @@ export type FollowUpBucket =
  *  enforce_sale_immutability() in 1500_sales_commission.sql. */
 export type SaleStatus = "pending" | "approved" | "rejected";
 
+/** One line item in my_daily_report_summary()'s per-category lead lists
+ *  (migration 2000). scheduled_at is present only for schedules/appointments. */
+export interface DailyReportLead {
+  full_name: string;
+  phone: string;
+  scheduled_at?: string | null;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -219,6 +227,8 @@ export interface Database {
           whatsapp_template: string;
           round_robin_cursor: number;
           report_timezone: string;
+          admin_whatsapp_number: string | null;
+          daily_report_template: string;
           updated_by: string | null;
           updated_at: string;
         };
@@ -253,6 +263,24 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sales"]["Row"]>;
         Relationships: [];
       };
+      attendance: {
+        Row: {
+          id: string;
+          telecaller_id: string | null;
+          work_date: string;
+          clock_in_at: string;
+          clock_out_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        // Written exclusively by caller_clock_in() / caller_clock_out() —
+        // `authenticated` has no INSERT/UPDATE/DELETE grant on this table at
+        // all (migration 1900). Same `never`-avoidance note as
+        // lead_history_logs above.
+        Insert: Partial<Database["public"]["Tables"]["attendance"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["attendance"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: {
       telecaller_directory: {
@@ -278,6 +306,8 @@ export interface Database {
         Row: {
           whatsapp_template: string;
           report_timezone: string;
+          admin_whatsapp_number: string | null;
+          daily_report_template: string;
         };
         Relationships: [];
       };
@@ -361,6 +391,8 @@ export interface Database {
           p_enabled?: boolean | null;
           p_sla_hours?: number | null;
           p_whatsapp_template?: string | null;
+          p_admin_whatsapp_number?: string | null;
+          p_daily_report_template?: string | null;
         };
         Returns: Database["public"]["Tables"]["system_settings"]["Row"];
       };
@@ -453,6 +485,23 @@ export interface Database {
           unseen_rejections: number;
         }[];
       };
+      caller_clock_in: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["attendance"]["Row"];
+      };
+      caller_clock_out: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["attendance"]["Row"];
+      };
+      my_daily_report_summary: {
+        Args: { p_date: string };
+        Returns: {
+          warm_leads: DailyReportLead[];
+          converted: DailyReportLead[];
+          schedules: DailyReportLead[];
+          appointments: DailyReportLead[];
+        }[];
+      };
     };
     Enums: {
       user_role: UserRole;
@@ -478,3 +527,4 @@ export type LeadHistoryLog = Tables<"lead_history_logs">;
 export type SystemSettings = Tables<"system_settings">;
 export type CallSession = Tables<"call_sessions">;
 export type Sale = Tables<"sales">;
+export type Attendance = Tables<"attendance">;

@@ -11,7 +11,11 @@
 // one. So only content-hashed build assets are cached; every navigation and
 // every Supabase call goes to the network, always.
 
-const STATIC_CACHE = "trace-static-v1";
+// Bump this whenever shipped assets change in a way a stale cache could hide.
+// The activate handler below deletes every cache whose name isn't this one, so
+// changing the version is what actually evicts previously cached chunks — the
+// cache-first strategy below will otherwise serve them indefinitely.
+const STATIC_CACHE = "trace-static-v2";
 
 self.addEventListener("install", (event) => {
   // Take over immediately rather than waiting for every existing tab to close,

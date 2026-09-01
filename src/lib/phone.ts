@@ -23,20 +23,27 @@ export function toWhatsAppNumber(phone: string): string {
   return national.length === 10 ? `91${national}` : national;
 }
 
-/** Substitutes {{name}} / {{agent}} placeholders in the configurable template. */
+/**
+ * Substitutes {{name}} / {{agent}} placeholders in the configurable template.
+ *
+ * A key that is present but holds undefined/null renders as an empty string,
+ * never the word "undefined". Without this, a template token whose value went
+ * missing (a renamed RPC field, a half-deployed frontend) silently shipped
+ * literal "undefined" into a customer-facing WhatsApp message.
+ */
 export function fillTemplate(
   template: string,
-  vars: Record<string, string>,
+  vars: Record<string, string | undefined | null>,
 ): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    key in vars ? vars[key] : match,
+    key in vars ? (vars[key] ?? "") : match,
   );
 }
 
 export function buildWhatsAppLink(
   phone: string,
   template: string,
-  vars: Record<string, string>,
+  vars: Record<string, string | undefined | null>,
 ): string {
   const number = toWhatsAppNumber(phone);
   const text = encodeURIComponent(fillTemplate(template, vars));
