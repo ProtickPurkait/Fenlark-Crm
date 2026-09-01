@@ -64,6 +64,14 @@ export type FollowUpBucket =
  *  enforce_sale_immutability() in 1500_sales_commission.sql. */
 export type SaleStatus = "pending" | "approved" | "rejected";
 
+/** One line item in my_daily_report_summary()'s per-category lead lists
+ *  (migration 2000). scheduled_at is present only for schedules/appointments. */
+export interface DailyReportLead {
+  full_name: string;
+  phone: string;
+  scheduled_at?: string | null;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -488,10 +496,10 @@ export interface Database {
       my_daily_report_summary: {
         Args: { p_date: string };
         Returns: {
-          warm_leads_count: number;
-          converted_count: number;
-          schedules_count: number;
-          appointments_count: number;
+          warm_leads: DailyReportLead[];
+          converted: DailyReportLead[];
+          schedules: DailyReportLead[];
+          appointments: DailyReportLead[];
         }[];
       };
     };

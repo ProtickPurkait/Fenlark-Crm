@@ -1019,13 +1019,24 @@ select public.caller_log_sale(
 
 select public.zz_expect(
   (select
-     n.warm_leads_count   = b.warm_leads_count + 1
-     and n.converted_count    = b.converted_count + 1
-     and n.schedules_count    = b.schedules_count + 1
-     and n.appointments_count = b.appointments_count + 1
+     jsonb_array_length(n.warm_leads)   = jsonb_array_length(b.warm_leads) + 1
+     and jsonb_array_length(n.converted)    = jsonb_array_length(b.converted) + 1
+     and jsonb_array_length(n.schedules)    = jsonb_array_length(b.schedules) + 1
+     and jsonb_array_length(n.appointments) = jsonb_array_length(b.appointments) + 1
    from public.my_daily_report_summary((now() at time zone 'Asia/Kolkata')::date) n, zz_before b),
   'my_daily_report_summary() picks up exactly this section''s new warm/converted/'
   'scheduled activity and appointment, on top of whatever came before it');
+
+select public.zz_expect(
+  (select
+     n.warm_leads   @> '[{"full_name": "Report Lead One"}]'::jsonb
+     and n.converted    @> '[{"full_name": "Report Lead One"}]'::jsonb
+     and n.schedules    @> '[{"full_name": "Report Lead Two"}]'::jsonb
+     and n.appointments @> '[{"full_name": "Report Lead Two"}]'::jsonb
+     and not (n.appointments @> '[{"full_name": "Report Lead One"}]'::jsonb)
+   from public.my_daily_report_summary((now() at time zone 'Asia/Kolkata')::date) n),
+  'each list names the actual lead behind it, and a converted lead does not '
+  'linger in the appointments backlog');
 
 select public.caller_clock_out();
 

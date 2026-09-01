@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { fillTemplate } from "@/lib/phone";
+import { formatLeadList } from "@/lib/daily-report";
 import { springSoft, staggerContainer, staggerItem } from "@/lib/motion";
 import type { SystemSettings } from "@/lib/supabase/database.types";
 
@@ -297,22 +298,39 @@ export function SettingsClient({
             Report message
           </Label>
           <p className="text-xs text-muted-foreground">
-            {(["date", "agent", "warm", "converted", "schedules", "appointments"] as const).map(
-              (token, i) => (
-                <span key={token}>
-                  {i > 0 && " · "}
-                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
-                    {`{{${token}}}`}
-                  </code>
-                </span>
-              ),
-            )}
+            {(
+              [
+                "date",
+                "agent",
+                "warm_count",
+                "warm",
+                "converted_count",
+                "converted",
+                "schedules_count",
+                "schedules",
+                "appointments_count",
+                "appointments",
+              ] as const
+            ).map((token, i) => (
+              <span key={token}>
+                {i > 0 && " · "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                  {`{{${token}}}`}
+                </code>
+              </span>
+            ))}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            The <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">{"{{warm}}"}</code>
+            -style tokens (and converted/schedules/appointments) expand to a numbered list of
+            leads by name and phone, not a count — use the <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">_count</code> tokens
+            for the number on its own.
           </p>
           <Textarea
             id="report-template"
             value={reportTemplate}
             onChange={(e) => setReportTemplate(e.target.value)}
-            rows={6}
+            rows={10}
             className="resize-none font-mono text-sm"
           />
         </div>
@@ -325,10 +343,21 @@ export function SettingsClient({
             {fillTemplate(reportTemplate, {
               date: "2026-09-01",
               agent: "Priya",
-              warm: "4",
-              converted: "1",
-              schedules: "3",
-              appointments: "2",
+              warm_count: "2",
+              warm: formatLeadList([
+                { full_name: "Rohit Sharma", phone: "9876543210" },
+                { full_name: "Anjali Mehta", phone: "9876543211" },
+              ]),
+              converted_count: "1",
+              converted: formatLeadList([{ full_name: "Karan Gupta", phone: "9876543212" }]),
+              schedules_count: "1",
+              schedules: formatLeadList([
+                { full_name: "Sana Khan", phone: "9876543213", scheduled_at: "2026-09-03T11:00:00Z" },
+              ]),
+              appointments_count: "1",
+              appointments: formatLeadList([
+                { full_name: "Vikram Rao", phone: "9876543214", scheduled_at: "2026-09-05T09:30:00Z" },
+              ]),
             })}
           </p>
         </div>
