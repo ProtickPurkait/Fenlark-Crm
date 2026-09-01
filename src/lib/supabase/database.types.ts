@@ -253,26 +253,6 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sales"]["Row"]>;
         Relationships: [];
       };
-      daily_reports: {
-        Row: {
-          id: string;
-          telecaller_id: string | null;
-          report_date: string;
-          warm_leads_count: number;
-          converted_count: number;
-          schedules_count: number;
-          appointments_count: number;
-          notes: string | null;
-          submitted_at: string;
-          updated_at: string;
-        };
-        // Written exclusively by caller_submit_daily_report() — `authenticated`
-        // has no INSERT/UPDATE/DELETE grant on this table at all (migration
-        // 1800). Same `never`-avoidance note as lead_history_logs above.
-        Insert: Partial<Database["public"]["Tables"]["daily_reports"]["Row"]>;
-        Update: Partial<Database["public"]["Tables"]["daily_reports"]["Row"]>;
-        Relationships: [];
-      };
     };
     Views: {
       telecaller_directory: {
@@ -473,17 +453,6 @@ export interface Database {
           unseen_rejections: number;
         }[];
       };
-      caller_submit_daily_report: {
-        Args: {
-          p_report_date: string;
-          p_warm_leads_count: number;
-          p_converted_count: number;
-          p_schedules_count: number;
-          p_appointments_count: number;
-          p_notes?: string | null;
-        };
-        Returns: Database["public"]["Tables"]["daily_reports"]["Row"];
-      };
     };
     Enums: {
       user_role: UserRole;
@@ -509,4 +478,3 @@ export type LeadHistoryLog = Tables<"lead_history_logs">;
 export type SystemSettings = Tables<"system_settings">;
 export type CallSession = Tables<"call_sessions">;
 export type Sale = Tables<"sales">;
-export type DailyReport = Tables<"daily_reports">;

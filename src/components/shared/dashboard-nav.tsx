@@ -12,7 +12,6 @@ import {
   ListChecks,
   Wallet,
   HandCoins,
-  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,8 +24,7 @@ export type NavIcon =
   | "queue"
   | "history"
   | "earnings"
-  | "sales"
-  | "report";
+  | "sales";
 
 export interface NavItem {
   href: string;
@@ -48,7 +46,6 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   history: History,
   earnings: Wallet,
   sales: HandCoins,
-  report: ClipboardList,
 };
 
 function useIsActive() {
