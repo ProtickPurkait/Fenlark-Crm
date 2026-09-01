@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
@@ -16,7 +16,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,10 +52,14 @@ function LoginForm() {
       return;
     }
 
-    // Middleware resolves the destination by role; refresh() forces the server
-    // to re-evaluate with the now-authenticated session before we navigate.
-    router.refresh();
-    router.push(searchParams.get("next") ?? "/");
+    // A hard navigation, not router.push(): the client router cache (see
+    // staleTimes in next.config.ts) is keyed by URL alone, not by session, so
+    // switching accounts within that window could serve the *previous*
+    // account's cached /admin or /caller payload instead of asking the server
+    // to re-evaluate this new session. A full page load bypasses that cache
+    // entirely and lets middleware resolve the destination by this session's
+    // actual role.
+    window.location.assign(searchParams.get("next") ?? "/");
   }
 
   return (
