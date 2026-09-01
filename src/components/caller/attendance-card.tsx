@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Clock, LogIn, LogOut, Loader2, MessageCircle, TriangleAlert } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
-import { buildWhatsAppLink } from "@/lib/phone";
-import { formatLeadList } from "@/lib/daily-report";
+import { toWhatsAppNumber } from "@/lib/phone";
+import { buildReportMessage } from "@/lib/daily-report";
 import { springSoft, staggerContainer, staggerItem } from "@/lib/motion";
 import type { Attendance } from "@/lib/supabase/database.types";
 
@@ -94,18 +94,11 @@ export function AttendanceCard({
       return;
     }
 
-    const link = buildWhatsAppLink(adminWhatsappNumber ?? "", dailyReportTemplate, {
+    const message = buildReportMessage(dailyReportTemplate, data, {
       date: attendance.work_date,
       agent: agentName,
-      warm: formatLeadList(data.warm_leads),
-      warm_count: String(data.warm_leads.length),
-      converted: formatLeadList(data.converted),
-      converted_count: String(data.converted.length),
-      schedules: formatLeadList(data.schedules),
-      schedules_count: String(data.schedules.length),
-      appointments: formatLeadList(data.appointments),
-      appointments_count: String(data.appointments.length),
     });
+    const link = `https://wa.me/${toWhatsAppNumber(adminWhatsappNumber ?? "")}?text=${encodeURIComponent(message)}`;
     window.open(link, "_blank", "noopener,noreferrer");
   }
 

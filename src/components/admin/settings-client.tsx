@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { fillTemplate } from "@/lib/phone";
-import { formatLeadList } from "@/lib/daily-report";
+import { buildReportMessage } from "@/lib/daily-report";
 import { springSoft, staggerContainer, staggerItem } from "@/lib/motion";
 import type { SystemSettings } from "@/lib/supabase/database.types";
 
@@ -339,26 +339,26 @@ export function SettingsClient({
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Preview
           </p>
+          {/* Same builder the caller's Generate Report uses, so this preview
+              cannot drift from what actually gets sent. */}
           <p className="mt-1 whitespace-pre-line text-sm text-foreground/80">
-            {fillTemplate(reportTemplate, {
-              date: "2026-09-01",
-              agent: "Priya",
-              warm_count: "2",
-              warm: formatLeadList([
-                { full_name: "Rohit Sharma", phone: "9876543210" },
-                { full_name: "Anjali Mehta", phone: "9876543211" },
-              ]),
-              converted_count: "1",
-              converted: formatLeadList([{ full_name: "Karan Gupta", phone: "9876543212" }]),
-              schedules_count: "1",
-              schedules: formatLeadList([
-                { full_name: "Sana Khan", phone: "9876543213", scheduled_at: "2026-09-03T11:00:00Z" },
-              ]),
-              appointments_count: "1",
-              appointments: formatLeadList([
-                { full_name: "Vikram Rao", phone: "9876543214", scheduled_at: "2026-09-05T09:30:00Z" },
-              ]),
-            })}
+            {buildReportMessage(
+              reportTemplate,
+              {
+                warm_leads: [
+                  { full_name: "Rohit Sharma", phone: "9876543210" },
+                  { full_name: "Anjali Mehta", phone: "9876543211" },
+                ],
+                converted: [{ full_name: "Karan Gupta", phone: "9876543212" }],
+                schedules: [
+                  { full_name: "Sana Khan", phone: "9876543213", scheduled_at: "2026-09-03T11:00:00Z" },
+                ],
+                appointments: [
+                  { full_name: "Vikram Rao", phone: "9876543214", scheduled_at: "2026-09-05T09:30:00Z" },
+                ],
+              },
+              { date: "2026-09-01", agent: "Priya" },
+            )}
           </p>
         </div>
       </motion.section>
