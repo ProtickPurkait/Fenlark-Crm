@@ -1097,7 +1097,116 @@ reset role;
 
 
 -- ===========================================================================
-select public.zz_section('14. Anonymous access');
+select public.zz_section('14. Overnight shifts & orphan recovery');
+-- ===========================================================================
+-- Regression cover for migration 2100. Before it, caller_clock_out() only
+-- ever touched the row whose work_date was *today*, so a shift left open
+-- across midnight could never be closed by anyone and attendance silently
+-- accumulated rows with no clock_out_at.
+--
+-- c1 already has today's closed shift from section 13, so these use c3 (the
+-- overnight case) and c2 (the long-forgotten case) to stay independent of it.
+
+reset role;
+
+-- A telecaller of this section's own, for the same reason section 13 inserts
+-- its own leads: c3 was deleted back in section 9's user-deletion test, and
+-- c1 already carries today's closed shift.
+insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+values ('00000000-0000-0000-0000-0000000000c4', '00000000-0000-0000-0000-000000000000',
+        'authenticated', 'authenticated', 'esha@fenlark.test', '{}',
+        '{"full_name":"Esha Caller"}', now(), now());
+
+-- c4: clocked in before midnight, still running. work_date is already
+-- yesterday; clock_in_at is inside the 18h window caller_clock_out() reaches.
+insert into public.attendance (telecaller_id, work_date, clock_in_at) values
+  ('00000000-0000-0000-0000-0000000000c4',
+   (now() at time zone 'Asia/Kolkata')::date - 1,
+   now() - interval '5 hours');
+
+-- c2: forgotten three days ago. Far outside the window — closing this one
+-- with now() would book a 72-hour shift, so it must need an admin instead.
+insert into public.attendance (id, telecaller_id, work_date, clock_in_at) values
+  ('00000000-0000-0000-0000-00000000ae02',
+   '00000000-0000-0000-0000-0000000000c2',
+   (now() at time zone 'Asia/Kolkata')::date - 3,
+   now() - interval '3 days');
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c4"}', true);
+
+select public.zz_expect(
+  (select work_date = (now() at time zone 'Asia/Kolkata')::date - 1
+     from public.my_current_attendance()),
+  'my_current_attendance() surfaces an overnight shift whose work_date is '
+  'already yesterday');
+
+select public.caller_clock_out();
+
+select public.zz_expect(
+  (select clock_out_at is not null from public.attendance
+    where telecaller_id = '00000000-0000-0000-0000-0000000000c4'
+      and work_date = (now() at time zone 'Asia/Kolkata')::date - 1),
+  'caller_clock_out() closes a shift that was opened before midnight');
+
+select public.zz_expect(
+  (select count(*) from public.attendance
+    where telecaller_id = '00000000-0000-0000-0000-0000000000c4'
+      and clock_out_at is null) = 0,
+  'the overnight shift leaves no second, still-open row behind');
+
+select public.zz_expect(
+  (select clock_out_at is not null from public.my_current_attendance()),
+  'the just-closed overnight shift stays current, so Generate Report is still '
+  'reachable after midnight');
+
+-- The window is a guard, not a convenience: a shift nobody closed three days
+-- ago must not silently acquire a 72-hour duration.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c2"}', true);
+
+select public.zz_expect_error(
+  $q$select public.caller_clock_out()$q$,
+  'a shift forgotten days ago is NOT auto-closed by clocking out today');
+
+select public.zz_expect(
+  (select count(*) from public.my_current_attendance()) = 0,
+  'a shift older than the window is not offered to the caller UI either');
+
+select public.zz_expect_error(
+  $q$select public.admin_close_attendance(
+       '00000000-0000-0000-0000-00000000ae02', now() - interval '3 days' + interval '8 hours')$q$,
+  'a telecaller cannot close an attendance row');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+select public.zz_expect_error(
+  $q$select public.admin_close_attendance(
+       '00000000-0000-0000-0000-00000000ae02', now() + interval '1 hour')$q$,
+  'admin_close_attendance rejects a clock-out in the future');
+
+select public.zz_expect_error(
+  $q$select public.admin_close_attendance(
+       '00000000-0000-0000-0000-00000000ae02', now() - interval '4 days')$q$,
+  'admin_close_attendance rejects a clock-out that precedes the clock-in');
+
+select public.admin_close_attendance(
+  '00000000-0000-0000-0000-00000000ae02', now() - interval '3 days' + interval '8 hours');
+
+select public.zz_expect(
+  (select clock_out_at = now() - interval '3 days' + interval '8 hours'
+     from public.attendance where id = '00000000-0000-0000-0000-00000000ae02'),
+  'an admin can close an orphaned shift at the time it actually ended');
+
+select public.zz_expect_error(
+  $q$select public.admin_close_attendance(
+       '00000000-0000-0000-0000-00000000ae02', now() - interval '2 days')$q$,
+  'a shift that is already closed cannot be closed twice');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('15. Anonymous access');
 -- ===========================================================================
 
 reset role;

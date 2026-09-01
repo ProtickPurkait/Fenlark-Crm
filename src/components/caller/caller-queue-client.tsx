@@ -27,8 +27,17 @@ interface DashboardStats {
   untouched_new: number;
 }
 
+/**
+ * Rows fetched per request. The queue is ordered by queue_rank, so the first
+ * page is everything actually actionable — overdue, then due, then untouched
+ * new leads. Loading the whole book instead cost 1.3 MB at 2,000 leads on a
+ * screen telecallers keep open all day on mobile data.
+ */
+export const QUEUE_PAGE_SIZE = 100;
+
 interface CallerQueueClientProps {
   initialLeads: LeadQueueRow[];
+  totalLeads: number;
   whatsappTemplate: string;
   agentName: string;
   initialStats: DashboardStats | null;
@@ -37,12 +46,15 @@ interface CallerQueueClientProps {
 
 export function CallerQueueClient({
   initialLeads,
+  totalLeads,
   whatsappTemplate,
   agentName,
   initialStats,
   initialSaleStatusByLead,
 }: CallerQueueClientProps) {
   const [leads, setLeads] = useState(initialLeads);
+  const [total, setTotal] = useState(totalLeads);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [stats, setStats] = useState(initialStats);
   const [saleStatusByLead, setSaleStatusByLead] = useState(initialSaleStatusByLead);
   const [selected, setSelected] = useState<LeadQueueRow | null>(null);
@@ -62,16 +74,22 @@ export function CallerQueueClient({
   async function refetch() {
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
-    const [{ data: freshLeads }, { data: freshStats }, { data: freshSales }] = await Promise.all([
+    // Refetch exactly as many rows as are on screen, not the first page: a
+    // caller who has loaded three pages and then saves a disposition should
+    // not watch two of them disappear.
+    const windowSize = Math.max(leads.length, QUEUE_PAGE_SIZE);
+    const [{ data: freshLeads, count }, { data: freshStats }, { data: freshSales }] = await Promise.all([
       supabase
         .from("lead_queue")
-        .select("*")
+        .select("*", { count: "exact" })
         .order("queue_rank", { ascending: true })
-        .order("scheduled_at", { ascending: true, nullsFirst: false }),
+        .order("scheduled_at", { ascending: true, nullsFirst: false })
+        .range(0, windowSize - 1),
       supabase.rpc("my_dashboard_stats"),
       supabase.from("sales").select("lead_id, status").in("status", ["pending", "approved"]),
     ]);
     setLeads(freshLeads ?? []);
+    if (typeof count === "number") setTotal(count);
     setStats(freshStats?.[0] ?? null);
     setSaleStatusByLead(
       Object.fromEntries((freshSales ?? []).map((s) => [s.lead_id, s.status])),
@@ -80,6 +98,32 @@ export function CallerQueueClient({
     if (selected) {
       setSelected((freshLeads ?? []).find((l) => l.id === selected.id) ?? null);
     }
+  }
+
+  async function loadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data: nextPage, count } = await supabase
+      .from("lead_queue")
+      .select("*", { count: "exact" })
+      .order("queue_rank", { ascending: true })
+      .order("scheduled_at", { ascending: true, nullsFirst: false })
+      .range(leads.length, leads.length + QUEUE_PAGE_SIZE - 1);
+
+    setLoadingMore(false);
+    if (typeof count === "number") setTotal(count);
+    if (!nextPage?.length) return;
+
+    // Dedupe by id: a lead whose rank changed between the two requests can
+    // otherwise arrive on this page having already been on an earlier one,
+    // and React would warn on the duplicate key.
+    setLeads((prev) => {
+      const seen = new Set(prev.map((l) => l.id));
+      return [...prev, ...nextPage.filter((l) => !seen.has(l.id))];
+    });
   }
 
   return (
@@ -201,6 +245,23 @@ export function CallerQueueClient({
             ))}
           </AnimatePresence>
         </motion.div>
+      )}
+
+      {leads.length < total && (
+        <div className="flex flex-col items-center gap-2 pt-1">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Showing {leads.length} of {total} leads
+          </p>
+          <MotionButton
+            variant="glass"
+            size="sm"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="h-10 w-full sm:h-8 sm:w-auto"
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </MotionButton>
+        </div>
       )}
 
       <CallDispositionDrawer

@@ -357,7 +357,7 @@ export function SettingsClient({
                   { full_name: "Vikram Rao", phone: "9876543214", scheduled_at: "2026-09-05T09:30:00Z" },
                 ],
               },
-              { date: "2026-09-01", agent: "Priya" },
+              { date: "2026-09-01", agent: "Priya", timeZone: settings.report_timezone },
             )}
           </p>
         </div>

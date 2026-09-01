@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Clock, LogIn, LogOut, Loader2, MessageCircle, TriangleAlert } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
 import { toWhatsAppNumber } from "@/lib/phone";
-import { buildReportMessage } from "@/lib/daily-report";
+import { buildReportMessage, DEFAULT_REPORT_TIMEZONE } from "@/lib/daily-report";
 import { springSoft, staggerContainer, staggerItem } from "@/lib/motion";
 import type { Attendance } from "@/lib/supabase/database.types";
 
@@ -14,10 +14,18 @@ interface AttendanceCardProps {
   agentName: string;
   adminWhatsappNumber: string | null;
   dailyReportTemplate: string;
+  reportTimezone: string;
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+// Pinned to the business timezone rather than the device's, for the same
+// reason the report's dates are (see formatReportDate): a shift that started
+// at 09:00 IST must read 09:00 on every handset, whatever it is set to.
+function formatTime(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleTimeString("en-IN", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /**
@@ -29,7 +37,9 @@ export function AttendanceCard({
   agentName,
   adminWhatsappNumber,
   dailyReportTemplate,
+  reportTimezone,
 }: AttendanceCardProps) {
+  const tz = reportTimezone || DEFAULT_REPORT_TIMEZONE;
   const [attendance, setAttendance] = useState(initialAttendance);
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -97,6 +107,7 @@ export function AttendanceCard({
     const message = buildReportMessage(dailyReportTemplate, data, {
       date: attendance.work_date,
       agent: agentName,
+      timeZone: tz,
     });
     const link = `https://wa.me/${toWhatsAppNumber(adminWhatsappNumber ?? "")}?text=${encodeURIComponent(message)}`;
     window.open(link, "_blank", "noopener,noreferrer");
@@ -121,17 +132,17 @@ export function AttendanceCard({
             <span>
               Clocked in at{" "}
               <span className="font-medium tabular-nums">
-                {formatTime(attendance.clock_in_at)}
+                {formatTime(attendance.clock_in_at, tz)}
               </span>
             </span>
           ) : (
             <span>
               <span className="font-medium tabular-nums">
-                {formatTime(attendance.clock_in_at)}
+                {formatTime(attendance.clock_in_at, tz)}
               </span>
               {" – "}
               <span className="font-medium tabular-nums">
-                {formatTime(attendance.clock_out_at)}
+                {formatTime(attendance.clock_out_at, tz)}
               </span>
             </span>
           )}
