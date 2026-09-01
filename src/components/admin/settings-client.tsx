@@ -29,6 +29,8 @@ export function SettingsClient({
   const [enabled, setEnabled] = useState(initial.stale_recycling_enabled);
   const [hours, setHours] = useState(String(initial.stale_sla_hours));
   const [template, setTemplate] = useState(initial.whatsapp_template);
+  const [adminWhatsapp, setAdminWhatsapp] = useState(initial.admin_whatsapp_number ?? "");
+  const [reportTemplate, setReportTemplate] = useState(initial.daily_report_template);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -45,7 +47,9 @@ export function SettingsClient({
   const dirty =
     enabled !== settings.stale_recycling_enabled ||
     hours !== String(settings.stale_sla_hours) ||
-    template !== settings.whatsapp_template;
+    template !== settings.whatsapp_template ||
+    adminWhatsapp !== (settings.admin_whatsapp_number ?? "") ||
+    reportTemplate !== settings.daily_report_template;
 
   async function handleSave() {
     if (savingRef.current) return;
@@ -57,6 +61,10 @@ export function SettingsClient({
     }
     if (template.trim() === "") {
       setError("The WhatsApp template cannot be empty.");
+      return;
+    }
+    if (reportTemplate.trim() === "") {
+      setError("The daily report template cannot be empty.");
       return;
     }
 
@@ -71,6 +79,11 @@ export function SettingsClient({
       p_enabled: enabled,
       p_sla_hours: parsedHours,
       p_whatsapp_template: template,
+      // Sent as "" rather than omitted when cleared: the RPC treats an actual
+      // empty string as "clear it" and a genuinely absent argument as "leave
+      // it alone" — see admin_update_settings() in migration 1900.
+      p_admin_whatsapp_number: adminWhatsapp,
+      p_daily_report_template: reportTemplate,
     });
 
     savingRef.current = false;
@@ -246,6 +259,77 @@ export function SettingsClient({
           </p>
           <p className="mt-1 text-sm text-foreground/80">
             {fillTemplate(template, { name: "Rohit Sharma", agent: "Priya" })}
+          </p>
+        </div>
+      </motion.section>
+
+      {/* ---------------------------------------------------------------- */}
+      <motion.section variants={staggerItem} className="glass rounded-2xl p-6">
+        <h2 className="font-medium tracking-tight">Daily report WhatsApp</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Where a telecaller&apos;s Generate Report button sends to, once they
+          clock out for the day. Left empty, that button stays disabled for
+          everyone.
+        </p>
+
+        <div className="mt-4 space-y-1.5">
+          <Label
+            htmlFor="admin-whatsapp"
+            className="text-xs uppercase tracking-wider text-muted-foreground"
+          >
+            Your WhatsApp number
+          </Label>
+          <Input
+            id="admin-whatsapp"
+            type="tel"
+            placeholder="+91 98765 43210"
+            value={adminWhatsapp}
+            onChange={(e) => setAdminWhatsapp(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+
+        <div className="mt-4 space-y-1.5">
+          <Label
+            htmlFor="report-template"
+            className="text-xs uppercase tracking-wider text-muted-foreground"
+          >
+            Report message
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {(["date", "agent", "warm", "converted", "schedules", "appointments"] as const).map(
+              (token, i) => (
+                <span key={token}>
+                  {i > 0 && " · "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                    {`{{${token}}}`}
+                  </code>
+                </span>
+              ),
+            )}
+          </p>
+          <Textarea
+            id="report-template"
+            value={reportTemplate}
+            onChange={(e) => setReportTemplate(e.target.value)}
+            rows={6}
+            className="resize-none font-mono text-sm"
+          />
+        </div>
+
+        <div className="mt-3 rounded-lg border border-border bg-muted p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Preview
+          </p>
+          <p className="mt-1 whitespace-pre-line text-sm text-foreground/80">
+            {fillTemplate(reportTemplate, {
+              date: "2026-09-01",
+              agent: "Priya",
+              warm: "4",
+              converted: "1",
+              schedules: "3",
+              appointments: "2",
+            })}
           </p>
         </div>
       </motion.section>
