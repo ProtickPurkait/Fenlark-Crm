@@ -1,18 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
 
 export function SignOutButton() {
-  const router = useRouter();
-
   async function handleSignOut() {
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.refresh();
-    router.push("/login");
+    // A hard navigation, not router.push(): the client router cache (see
+    // staleTimes in next.config.ts) is keyed by URL alone, not by session, so
+    // a soft navigation back to /login can still serve another account's
+    // cached /admin or /caller payload on the next sign-in within that
+    // window. A full page load bypasses that cache entirely.
+    window.location.assign("/login");
   }
 
   return (
