@@ -130,6 +130,19 @@ export interface TelecallerActivityCallEntry {
   lead_full_name: string;
 }
 
+/** One row of admin_recent_activity() (migration 2500) — the dashboard's
+ *  Recent Activity card. actor_name is null for a system action or a
+ *  deleted actor's account; the client tells those apart via actor_kind. */
+export interface AdminRecentActivityRow {
+  id: number;
+  event_type: AuditEvent;
+  created_at: string;
+  actor_kind: "user" | "system";
+  actor_name: string | null;
+  lead_name: string | null;
+  to_status: LeadStatus | null;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -571,6 +584,10 @@ export interface Database {
           logs: TelecallerActivityLogEntry[];
           calls: TelecallerActivityCallEntry[];
         }[];
+      };
+      admin_recent_activity: {
+        Args: { p_date?: string | null; p_limit?: number };
+        Returns: AdminRecentActivityRow[];
       };
       admin_lead_categories: {
         Args: Record<string, never>;

@@ -1523,7 +1523,68 @@ reset role;
 
 
 -- ===========================================================================
-select public.zz_section('18. Anonymous access');
+select public.zz_section('18. Dashboard recent activity feed');
+-- ===========================================================================
+-- admin_recent_activity() backs the dashboard's Recent Activity card and
+-- replaced a plain client-side select: p_date null keeps the card's original
+-- "most recent N, any day" behaviour; p_date set filters to one day in
+-- report_timezone, the same boundary logic as admin_telecaller_activity()
+-- (2300). Snapshotted as a before/after delta, like my_daily_report_summary's
+-- test, since earlier sections in this file already left activity behind on
+-- "today".
+
+-- Fixtures are inserted while role is still reset (the connecting/owner
+-- role): authenticated has no INSERT grant on leads at all (0500/1000) —
+-- public.leads is written only through admin_import_leads() / caller RPCs.
+insert into public.leads (id, full_name, phone, status, assigned_to, assigned_at, source) values
+  ('00000000-0000-0000-0000-0000000000f9', 'Feed Lead One', '9815500001', 'new',
+   '00000000-0000-0000-0000-0000000000b1', now(), 'manual');
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+-- Snapshotted after the lead above already exists (its own lead_created/
+-- assigned rows are not what this section is testing), so the delta below
+-- isolates exactly what log_call_interaction() adds.
+create temporary table zz_recent_before as
+  select * from public.admin_recent_activity((now() at time zone 'Asia/Kolkata')::date, 1000);
+
+-- Called as the admin (a1), which is_admin() lets through regardless of
+-- whose lead this is — so the actor on the resulting rows is Aditi, not Sita.
+select public.log_call_interaction(
+  '00000000-0000-0000-0000-0000000000f9', 'warm', 'Feed test remark.');
+
+-- One call writes two rows in the same transaction — status_changed (the
+-- 0400 trigger) and remark_added (log_call_interaction() itself) — sharing
+-- one created_at exactly, which is what id desc as the RPC's tiebreaker
+-- exists for.
+select public.zz_expect(
+  (select count(*) from public.admin_recent_activity((now() at time zone 'Asia/Kolkata')::date, 1000))
+  = (select count(*) from zz_recent_before) + 2,
+  'admin_recent_activity() picks up both rows log_call_interaction() just wrote, on top of whatever came before it');
+
+select public.zz_expect(
+  (select event_type = 'remark_added' and actor_name = 'Aditi Admin'
+     and lead_name = 'Feed Lead One' and to_status = 'warm'
+     from public.admin_recent_activity(null, 1)),
+  'the newest event is the remark itself (not its same-instant status_changed sibling), naming the actual actor and lead');
+
+select public.zz_expect(
+  (select count(*) from public.admin_recent_activity(
+     (now() at time zone 'Asia/Kolkata')::date - 1, 1000)) = 0,
+  'a day with no activity returns no rows, not yesterday''s');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+
+select public.zz_expect_error(
+  $q$select * from public.admin_recent_activity(null, 50)$q$,
+  'a telecaller cannot read the dashboard''s activity feed');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('19. Anonymous access');
 -- ===========================================================================
 
 reset role;

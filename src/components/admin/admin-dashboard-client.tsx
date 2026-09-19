@@ -1,31 +1,26 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import {
   Activity,
+  Download,
   Inbox,
   RefreshCw,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react";
 import { BentoGrid, BentoCard } from "@/components/ui/bento";
 import { PipelineDonut } from "@/components/admin/pipeline-donut";
 import { LiveCallsPanel } from "@/components/admin/live-calls-panel";
 import { LeadStatusBadge } from "@/components/shared/lead-status-badge";
 import { staggerContainer, staggerItem } from "@/lib/motion";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn } from "@/lib/utils";
 import type { LeadStatus } from "@/lib/pipeline";
-
-interface RecentActivity {
-  id: number;
-  event_type: string;
-  created_at: string;
-  actor_kind: "user" | "system";
-  actor_name: string | null;
-  lead_name: string | null;
-  to_status: LeadStatus | null;
-}
+import type { AdminRecentActivityRow } from "@/lib/supabase/database.types";
 
 export interface AdminDashboardData {
   totalLeads: number;
@@ -36,7 +31,7 @@ export interface AdminDashboardData {
   slaEnabled: boolean;
   slaHours: number;
   slaRevokedTotal: number;
-  recent: RecentActivity[];
+  recent: AdminRecentActivityRow[];
 }
 
 interface ActiveCallRow {
@@ -61,15 +56,47 @@ export function AdminDashboardClient({
   data,
   activeCalls = [],
   callStats = [],
+  activityDate = null,
+  today,
 }: {
   data: AdminDashboardData;
   activeCalls?: ActiveCallRow[];
   callStats?: CallStatRow[];
+  /** Filters the Recent Activity card to one day, in report_timezone. Null
+   *  means the card's original behaviour: most recent events, any day. */
+  activityDate?: string | null;
+  today?: string;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const conversionRate =
     data.totalLeads > 0
       ? ((data.convertedCount / data.totalLeads) * 100).toFixed(1)
       : "0.0";
+
+  function setActivityDate(next: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("date", next);
+    else params.delete("date");
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  // Mirrors what's on screen — same event labels, same timestamp format —
+  // rather than raw column values, so the file reads the way the card does.
+  function handleDownloadCsv() {
+    const header = ["Time", "Lead", "Event", "Status", "Actor"];
+    const body = data.recent.map((item) => [
+      new Date(item.created_at).toLocaleString(),
+      item.lead_name ?? "Lead",
+      humanizeEvent(item.event_type),
+      item.to_status ?? "",
+      item.actor_kind === "system" ? "System" : (item.actor_name ?? "a deleted user"),
+    ]);
+    const suffix = activityDate ?? "recent";
+    downloadCsv(`activity-${suffix}.csv`, toCsv([header, ...body]));
+  }
 
   return (
     <div className="space-y-6">
@@ -197,20 +224,56 @@ export function AdminDashboardClient({
 
         {/* Recent activity, straight off the audit trail. */}
         <BentoCard span="lg:col-span-6 sm:col-span-2" glow="violet" className="p-6">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-medium">Recent Activity</h2>
               <p className="text-xs text-muted-foreground">
-                Live from the immutable audit trail
+                {activityDate
+                  ? `Everything logged on ${activityDate}`
+                  : "Live from the immutable audit trail"}
               </p>
             </div>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                aria-label="Filter activity by date"
+                value={activityDate ?? ""}
+                max={today}
+                onChange={(e) => setActivityDate(e.target.value || null)}
+                className="h-8 rounded-lg bg-transparent px-2 text-xs ring-1 ring-border"
+              />
+              {activityDate && (
+                <button
+                  type="button"
+                  onClick={() => setActivityDate(null)}
+                  aria-label="Clear date filter"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg ring-1 ring-border transition-colors hover:bg-accent"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleDownloadCsv}
+                disabled={data.recent.length === 0}
+                aria-label="Download this feed as CSV"
+                className="flex h-8 items-center gap-1 rounded-lg px-2 text-xs ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" />
+                CSV
+              </button>
+              <Activity className="ml-1 h-4 w-4 text-muted-foreground" />
+            </div>
           </div>
 
           {data.recent.length === 0 ? (
             <EmptyState
               title="Nothing logged yet"
-              body="Call activity and assignment changes will appear here as they happen."
+              body={
+                activityDate
+                  ? "No activity was recorded on this day."
+                  : "Call activity and assignment changes will appear here as they happen."
+              }
             />
           ) : (
             <motion.ul
