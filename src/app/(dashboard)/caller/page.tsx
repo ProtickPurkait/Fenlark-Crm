@@ -2,11 +2,21 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/supabase/current-user";
 import { CallerQueueClient } from "@/components/caller/caller-queue-client";
 import { QUEUE_PAGE_SIZE } from "@/lib/pipeline";
+import { applyQueueFilters, parseQueueFilters } from "@/lib/queue-filters";
 import { AttendanceCard } from "@/components/caller/attendance-card";
 
-export default async function CallerQueuePage() {
+export default async function CallerQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const userId = await requireUserId();
   const supabase = await createClient();
+
+  // Filters live in the URL, like the admin lead list: a filtered queue
+  // survives a refresh and the back button, which matters on a phone that
+  // reloads the tab whenever the dialer takes over the screen.
+  const filters = parseQueueFilters(await searchParams);
 
   // Guard, not paranoia: this exact page shipped with QUEUE_PAGE_SIZE imported
   // from a "use client" module, where it arrived as a client-reference proxy.
@@ -31,12 +41,14 @@ export default async function CallerQueuePage() {
       // sale badge renders on the converted lead it belongs to, so hiding
       // them would hide the sale. queue_rank already sorts them last, so they
       // fall off the first page on their own.
-      supabase
-        .from("lead_queue")
-        .select("*", { count: "exact" })
-        .order("queue_rank", { ascending: true })
-        .order("scheduled_at", { ascending: true, nullsFirst: false })
-        .range(0, QUEUE_PAGE_SIZE - 1),
+      applyQueueFilters(
+        supabase
+          .from("lead_queue")
+          .select("*", { count: "exact" })
+          .order("queue_rank", { ascending: true })
+          .order("scheduled_at", { ascending: true, nullsFirst: false }),
+        filters,
+      ).range(0, QUEUE_PAGE_SIZE - 1),
       // app_settings, not system_settings: the full config row is admin-only
       // as of migration 1000, and this page runs under the caller's session.
       supabase
@@ -73,6 +85,7 @@ export default async function CallerQueuePage() {
       <CallerQueueClient
         initialLeads={leads ?? []}
         totalLeads={count ?? (leads?.length ?? 0)}
+        filters={filters}
         whatsappTemplate={settings?.whatsapp_template ?? ""}
         agentName={profile?.full_name ?? "Telecaller"}
         initialStats={stats?.[0] ?? null}
