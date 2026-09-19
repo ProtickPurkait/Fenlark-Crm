@@ -23,6 +23,7 @@ const ADMIN_NAV: NavItem[] = [
     shortLabel: "Callers",
   },
   { href: "/admin/sales", label: "Sales", icon: "sales" },
+  { href: "/admin/activity", label: "Activity", icon: "activity" },
   { href: "/admin/settings", label: "Settings", icon: "settings" },
 ];
 

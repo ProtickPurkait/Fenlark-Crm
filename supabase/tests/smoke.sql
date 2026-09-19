@@ -1272,7 +1272,128 @@ reset role;
 
 
 -- ===========================================================================
-select public.zz_section('16. Anonymous access');
+select public.zz_section('16. Telecaller activity');
+-- ===========================================================================
+-- Migration 2300. The column that carries the weight is longest_gap_seconds:
+-- it comes off the append-only audit trail, so a telecaller can produce
+-- activity or not, but cannot erase a quiet afternoon after the fact.
+--
+-- Two fresh telecallers so these assertions do not depend on what earlier
+-- sections left behind: one working steadily, one clocked in but idle.
+
+reset role;
+
+insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) values
+  ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-000000000000',
+   'authenticated','authenticated','steady@fenlark.test','{}','{"full_name":"Steady Sita"}',now(),now()),
+  ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-000000000000',
+   'authenticated','authenticated','idle@fenlark.test','{}','{"full_name":"Idle Imran"}',now(),now());
+
+insert into public.leads (id, full_name, phone, status, assigned_to, assigned_at, source) values
+  ('00000000-0000-0000-0000-0000000000f1','Activity Lead One','9813300001','new','00000000-0000-0000-0000-0000000000b1',now(),'manual'),
+  ('00000000-0000-0000-0000-0000000000f2','Activity Lead Two','9813300002','new','00000000-0000-0000-0000-0000000000b2',now(),'manual');
+
+-- Both clock a full 8-hour shift from 09:00 IST. clock_out_at is set
+-- explicitly so these assertions do not shift with the wall clock.
+insert into public.attendance (telecaller_id, work_date, clock_in_at, clock_out_at) values
+  ('00000000-0000-0000-0000-0000000000b1', (now() at time zone 'Asia/Kolkata')::date,
+   (date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata',
+   (date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '17 hours') at time zone 'Asia/Kolkata'),
+  ('00000000-0000-0000-0000-0000000000b2', (now() at time zone 'Asia/Kolkata')::date,
+   (date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata',
+   (date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '17 hours') at time zone 'Asia/Kolkata');
+
+-- Sita: a disposition every 20 minutes across the shift.
+insert into public.lead_history_logs (lead_id, actor_id, actor_kind, event_type, remark, created_at)
+  select '00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-0000000000b1','user','remark_added','Called',
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata')
+           + (g * interval '20 minutes')
+  from generate_series(0,23) g;
+
+-- Imran: two dispositions early, then five hours of silence.
+insert into public.lead_history_logs (lead_id, actor_id, actor_kind, event_type, remark, created_at)
+  select '00000000-0000-0000-0000-0000000000f2','00000000-0000-0000-0000-0000000000b2','user','remark_added','Called',
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata') + iv
+  from (values (interval '10 minutes'), (interval '20 minutes'), (interval '5 hours 20 minutes')) v(iv);
+
+-- Sita's calls, plus one swept session whose duration is unknown.
+insert into public.call_sessions (lead_id, caller_id, started_at, ended_at, duration_seconds, duration_source, ended_reason)
+  select '00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-0000000000b1',
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata') + (g * interval '20 minutes'),
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata') + (g * interval '20 minutes') + interval '3 minutes',
+         180, 'app_estimate', 'user'
+  from generate_series(0,9) g;
+
+insert into public.call_sessions (lead_id, caller_id, started_at, ended_at, duration_seconds, ended_reason) values
+  ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-0000000000b1',
+   ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '15 hours') at time zone 'Asia/Kolkata'),
+   ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '15 hours') at time zone 'Asia/Kolkata') + interval '5 minutes',
+   null, 'sweep');
+
+-- Imran: dial-and-drop, plus two durations typed in by hand.
+insert into public.call_sessions (lead_id, caller_id, started_at, ended_at, duration_seconds, duration_source, ended_reason)
+  select '00000000-0000-0000-0000-0000000000f2','00000000-0000-0000-0000-0000000000b2',
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata') + (g * interval '2 minutes'),
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata') + (g * interval '2 minutes') + interval '8 seconds',
+         8, 'app_estimate', 'user'
+  from generate_series(0,11) g;
+
+insert into public.call_sessions (lead_id, caller_id, started_at, ended_at, duration_seconds, duration_source, ended_reason)
+  select '00000000-0000-0000-0000-0000000000f2','00000000-0000-0000-0000-0000000000b2',
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata') + iv,
+         ((date_trunc('day', now() at time zone 'Asia/Kolkata') + interval '9 hours') at time zone 'Asia/Kolkata') + iv + interval '10 minutes',
+         600, 'manual', 'user'
+  from (values (interval '30 minutes'), (interval '50 minutes')) v(iv);
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+select public.zz_expect(
+  (select longest_gap_seconds <= 20 * 60
+     from public.admin_telecaller_activity((now() at time zone 'Asia/Kolkata')::date)
+    where telecaller_id = '00000000-0000-0000-0000-0000000000b1'),
+  'a telecaller working steadily shows no idle gap longer than their own cadence');
+
+-- 4h20m, not 5h: the gap runs from his last *call* ending, not his last
+-- remark. A long call is working time, and must not read as silence.
+select public.zz_expect(
+  (select longest_gap_seconds between 4 * 3600 and 4 * 3600 + 30 * 60
+     from public.admin_telecaller_activity((now() at time zone 'Asia/Kolkata')::date)
+    where telecaller_id = '00000000-0000-0000-0000-0000000000b2'),
+  'an idle afternoon surfaces as a multi-hour gap, measured from the last call '
+  'or disposition, whichever came later');
+
+select public.zz_expect(
+  (select median_call_seconds = 180 and short_calls = 0
+     from public.admin_telecaller_activity((now() at time zone 'Asia/Kolkata')::date)
+    where telecaller_id = '00000000-0000-0000-0000-0000000000b1'),
+  'a swept session''s unknown duration does not drag the median toward zero');
+
+select public.zz_expect(
+  (select median_call_seconds = 8 and short_calls = 12 and manual_duration_count = 2
+     from public.admin_telecaller_activity((now() at time zone 'Asia/Kolkata')::date)
+    where telecaller_id = '00000000-0000-0000-0000-0000000000b2'),
+  'dial-and-drop calls and hand-typed durations are both counted and reported');
+
+-- A telecaller with no attendance row has no shift to measure silence
+-- against; reporting zero there would read as "no idle time".
+select public.zz_expect(
+  (select longest_gap_seconds is null and clocked_seconds = 0
+     from public.admin_telecaller_activity((now() at time zone 'Asia/Kolkata')::date)
+    where telecaller_id = '00000000-0000-0000-0000-0000000000c2'),
+  'a telecaller who never clocked in reports a null gap, not a zero one');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+
+select public.zz_expect_error(
+  $q$select * from public.admin_telecaller_activity((now() at time zone 'Asia/Kolkata')::date)$q$,
+  'a telecaller cannot read the team''s activity metrics');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('17. Anonymous access');
 -- ===========================================================================
 
 reset role;
