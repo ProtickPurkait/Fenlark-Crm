@@ -144,11 +144,16 @@ reaches it.
 
 ## Testing — no Docker required
 
+Two layers. The first proves the database is right; the second proves the
+pages actually render what it returns.
+
+### Database — `npm run db:test`
+
 ```bash
-npm install && npm test
+npm install && npm run db:test
 ```
 
-Applies every migration and runs all 53 smoke-test assertions against a real
+Applies every migration and runs all 154 smoke-test assertions against a real
 Postgres in about five seconds. No daemon, no containers, no Supabase CLI —
 [PGlite](https://pglite.dev) is Postgres compiled to WASM running inside Node.
 `scripts/pglite-shim.sql` supplies the `auth` schema and the
@@ -160,6 +165,34 @@ Two things this cannot cover, both verified by the deploy below:
   `0800` logs a notice and skips `cron.schedule()`. The function it would call
   is fully exercised through `admin_run_recycle_now()`.
 - **The trigger on Supabase's real `auth.users`**, which the shim stands in for.
+- **Whether a page renders any of it**, which is what the layer below is for.
+
+### Pages — `npm run test:e2e`
+
+```bash
+npx playwright install chromium   # once
+npm run test:e2e
+```
+
+Builds the app, serves it against `e2e/stub-supabase.mjs`, and drives it in a
+real browser. No credentials, no Docker, no network.
+
+This layer exists because of a specific failure. `/caller` once shipped
+rendering "Showing 0 of 1006 leads" above an empty queue: the page size
+reached the server as a client-reference proxy, the query went out as
+`limit=NaN`, and the separate count query kept reporting the true total.
+`tsc`, ESLint, `next build` and every database assertion passed. Nothing in
+the project loaded a page, so nothing could have caught it.
+
+The stub answers with fixtures rather than a database — the SQL is already
+covered above, and duplicating it here would only mean two places to keep
+right. What it does hold to account is request shape: a malformed `limit`
+fails loudly instead of quietly returning nothing, because the quiet return
+*is* the bug.
+
+It is built, not dev-served, and never reuses a running server. The failure
+being guarded against was a build-time transform, so testing a dev server —
+or a server left over from the previous run — tests the wrong artifact.
 
 ## Deploying
 
@@ -234,6 +267,28 @@ Order the queue by `queue_rank, scheduled_at nulls last` and Overdue → Due Soo
 ---
 
 ## Things that will bite you
+
+### A constant imported by a Server Component from a `"use client"` module
+
+It arrives as a client-reference proxy, not as its value. `proxy - 1` is
+`NaN`, and `.range(0, NaN)` returns no rows while the accompanying count query
+reports the real total — so the page renders empty and confidently tells you
+how much it is not showing. `tsc` sees the literal type and is satisfied; the
+build transform is legal and succeeds. Shared values belong in a plain module
+(`src/lib/pipeline.ts`, `src/lib/queue-filters.ts`), never in a component
+file. `/caller` carries a `Number.isInteger` guard so a regression throws
+instead of serving an empty queue.
+
+### A client component seeded from server props needs a `key`
+
+`useState(initialRows)` takes the prop once, at mount. A soft navigation to
+the same route with different search params re-runs the server query and
+hands down new props, but React keeps the instance and the state ignores
+them: the URL changes and the list does not. Both `/admin/leads` and
+`/caller` therefore pass a `key` built from their filters, so a filter change
+builds a fresh instance. Components that render server props directly, with
+no `useState`, do not need one.
+
 
 **`is_admin()` must stay `SECURITY DEFINER`.** The RLS policy on `public.users`
 reads `public.users`. As `SECURITY INVOKER` that re-enters the same policy and

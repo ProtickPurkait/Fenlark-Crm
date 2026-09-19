@@ -336,7 +336,7 @@ export function CallerQueueClient({
       {leads.length < total && (
         <div className="flex flex-col items-center gap-2 pt-1">
           <p className="text-xs text-muted-foreground tabular-nums">
-            Showing {leads.length} of {total} leads
+            Showing {leads.length.toLocaleString()} of {total.toLocaleString()} leads
           </p>
           <MotionButton
             variant="glass"

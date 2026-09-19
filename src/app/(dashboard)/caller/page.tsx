@@ -83,6 +83,14 @@ export default async function CallerQueuePage({
         reportTimezone={settings?.report_timezone ?? ""}
       />
       <CallerQueueClient
+        // Remount on any filter change, the same way the admin lead list
+        // does. This component keeps its lead list, total and stats in
+        // useState seeded from these props, and useState ignores a prop that
+        // changes after mount — so a soft navigation to ?status=warm updated
+        // the URL, re-ran the server query, and then rendered the previous
+        // filter's rows anyway. A new key is what makes React build a fresh
+        // instance around the new data.
+        key={`${filters.status}-${filters.due}`}
         initialLeads={leads ?? []}
         totalLeads={count ?? (leads?.length ?? 0)}
         filters={filters}
