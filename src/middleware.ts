@@ -129,6 +129,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // sw.js and manifest.webmanifest are static files with no session of
+    // their own to check, but the matcher didn't exclude them, so every
+    // service-worker registration and every manifest fetch paid the same two
+    // sequential Supabase round trips (getUser() + the profile lookup, ~460ms
+    // per the staleTimes comment in next.config.ts) that every real page
+    // pays. The browser re-requests sw.js on its own schedule independently
+    // of navigation, so this was not a one-time cost.
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

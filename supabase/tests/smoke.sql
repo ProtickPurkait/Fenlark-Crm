@@ -1065,6 +1065,18 @@ select public.zz_expect(
     where telecaller_id = '00000000-0000-0000-0000-0000000000c1') = 1,
   'an admin can see every telecaller''s attendance');
 
+-- Nothing before this point has ever written daily_report_template with an
+-- explicit template argument, so the seed row is still whatever migrations
+-- 1900 -> 2000 -> 2500 left it as. This is the one window where that chain's
+-- own auto-upgrade logic is actually observable — the assertion below would
+-- pass just the same on a hand-built row, so it is migration 2500's own
+-- conditional UPDATE, not application code, that is under test here.
+select public.zz_expect(
+  (select daily_report_template like '%Upcoming appointments — as of today (%'
+     from public.system_settings where id = true),
+  'migration 2500''s label change reached the seed row automatically, the '
+  'same one-time-upgrade path 2000 used for the lead lists themselves');
+
 -- Settings: the WhatsApp destination number and report template, including
 -- the clear-to-null path — unlike the other text fields on this RPC, an empty
 -- string here is a deliberate "unset it", not "leave it alone". Storage is
