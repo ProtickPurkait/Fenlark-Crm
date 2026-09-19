@@ -54,26 +54,37 @@ export function formatWorkDate(isoDate: string): string {
 export function formatLeadList(
   items: DailyReportLead[],
   timeZone: string = DEFAULT_REPORT_TIMEZONE,
+  maxItems?: number,
 ): string {
   if (items.length === 0) return "None";
-  return items
-    .map((item, i) => {
-      const when = item.scheduled_at
-        ? ` — ${formatReportDate(item.scheduled_at, timeZone)}`
-        : "";
-      return `${i + 1}. ${item.full_name} (${item.phone})${when}`;
-    })
-    .join("\n");
+  const shown = maxItems && items.length > maxItems ? items.slice(0, maxItems) : items;
+  const lines = shown.map((item, i) => {
+    const when = item.scheduled_at
+      ? ` — ${formatReportDate(item.scheduled_at, timeZone)}`
+      : "";
+    return `${i + 1}. ${item.full_name} (${item.phone})${when}`;
+  });
+  const omitted = items.length - shown.length;
+  if (omitted > 0) {
+    // Not silent truncation: the header count (see section() below) still
+    // reports every item, so a list that stops short of it needs to say why.
+    lines.push(`…and ${omitted} more`);
+  }
+  return lines.join("\n");
 }
 
 /**
- * The structure the report falls back to when the stored template predates
- * the detail lists (migration 2000) — i.e. it still asks only for counts.
+ * The starting-point template offered to a brand-new admin, and the only
+ * thing substituted in when the stored template is missing or blank.
  *
- * Kept in code, not only in the database default, because the two can drift:
- * an admin who customised their template before 2000 never receives the new
- * one, and a report that silently omits the lead names is the exact failure
- * this fallback exists to prevent.
+ * It is NOT applied to a template that is merely unusual — a template an
+ * admin deliberately wrote that skips the lead-list tokens used to be
+ * silently replaced with this one, every single time, forever. That meant an
+ * admin who wanted a shorter report (say, just the counts) could never
+ * actually have one: whatever they saved, the message that shipped was this
+ * one. A template the admin chose to save is what they get; see
+ * templateOmitsLeadLists() below for how the UI now surfaces that choice's
+ * consequence instead of overriding it.
  */
 const DEFAULT_TEMPLATE = [
   "Daily Report — {{date}}",
@@ -111,9 +122,13 @@ function section(
   list: DailyReportLead[] | null | undefined,
   fallbackCount: number | null | undefined,
   timeZone: string,
+  maxItems?: number,
 ): { text: string; count: string } {
   if (Array.isArray(list)) {
-    return { text: formatLeadList(list, timeZone), count: String(list.length) };
+    // count is always the true total, even when the printed text is capped —
+    // "Appointments (37):" must stay an honest number regardless of how many
+    // of the 37 actually get listed underneath it.
+    return { text: formatLeadList(list, timeZone, maxItems), count: String(list.length) };
   }
   // Pre-2000 shape: a count with no names behind it. Report the number
   // honestly rather than inventing a list.
@@ -121,13 +136,54 @@ function section(
   return { text: n === 0 ? "None" : `${n} (details unavailable)`, count: String(n) };
 }
 
+/** Every token that expands to a list of leads by name, rather than a bare
+ *  count. Kept as one list because buildReportMessage() and
+ *  templateOmitsLeadLists() both have to agree on exactly what "mentions the
+ *  lead lists" means — drift between them would reopen the bug this file
+ *  exists to close. */
+const LEAD_LIST_TOKENS = ["{{warm}}", "{{converted}}", "{{schedules}}", "{{appointments}}"] as const;
+
+/**
+ * Cap on how many appointments a report actually lists by name.
+ *
+ * The other three lists — warm, converted, schedules — are naturally
+ * bounded: each can only ever hold what one telecaller did in one calendar
+ * day. Appointments is not scoped to today at all (see the header comment on
+ * my_daily_report_summary() in the migrations) — it is "everything still
+ * ahead of me", which only grows as a telecaller keeps booking. At 120 items
+ * that section alone measured out to roughly 9KB of encoded WhatsApp URL,
+ * long past the point of being read on a phone. 15 keeps the message to a
+ * size someone will actually open and scan; the header count and the
+ * trailing "…and N more" line in formatLeadList() keep the real total
+ * honest regardless.
+ */
+const MAX_APPOINTMENTS_SHOWN = 15;
+
+/**
+ * True when a template will never print a single lead's name — every list
+ * token is absent, so whatever it does say, it can only ever report counts.
+ *
+ * Used by the Settings screen to tell an admin what their template actually
+ * does, since buildReportMessage() below no longer silently rewrites it for
+ * them. Not an error: an admin may want exactly this, a short report with
+ * just the numbers. It's an FYI, not a block.
+ */
+export function templateOmitsLeadLists(template: string): boolean {
+  return !LEAD_LIST_TOKENS.some((token) => template.includes(token));
+}
+
 /**
  * Builds the finished WhatsApp message body.
  *
- * A stored template that never mentions {{warm}} is treated as stale and
- * replaced with DEFAULT_TEMPLATE: an admin who has not re-saved their
- * settings since the lists shipped should still get the lists, not a report
- * that quietly drops them.
+ * The template is used exactly as the admin saved it. It used to be
+ * discarded and swapped for DEFAULT_TEMPLATE whenever it didn't mention
+ * {{warm}} — meant to upgrade a template saved before the lead lists existed
+ * (migration 2000 already handles that, once, at the database level, for
+ * every row still on the exact old default), but it could not tell that case
+ * apart from an admin who had deliberately written a shorter template, and
+ * silently overrode that choice every time the report was sent. Only a
+ * template that is empty or unset falls back to DEFAULT_TEMPLATE now — never
+ * one that is merely short.
  */
 export function buildReportMessage(
   template: string,
@@ -138,9 +194,9 @@ export function buildReportMessage(
   const warm = section(data.warm_leads, data.warm_leads_count, tz);
   const converted = section(data.converted, data.converted_count, tz);
   const schedules = section(data.schedules, data.schedules_count, tz);
-  const appointments = section(data.appointments, data.appointments_count, tz);
+  const appointments = section(data.appointments, data.appointments_count, tz, MAX_APPOINTMENTS_SHOWN);
 
-  const usable = template.includes("{{warm}}") ? template : DEFAULT_TEMPLATE;
+  const usable = template.trim() === "" ? DEFAULT_TEMPLATE : template;
 
   return fillTemplate(usable, {
     date: formatWorkDate(meta.date),

@@ -1067,14 +1067,39 @@ select public.zz_expect(
 
 -- Settings: the WhatsApp destination number and report template, including
 -- the clear-to-null path — unlike the other text fields on this RPC, an empty
--- string here is a deliberate "unset it", not "leave it alone".
+-- string here is a deliberate "unset it", not "leave it alone". Storage is
+-- the canonical 10-digit form (migration 2400), not whatever text was typed.
 select public.admin_update_settings(null, null, null, '+91 90000 00000', 'Report for {{agent}} on {{date}}');
 
 select public.zz_expect(
-  (select admin_whatsapp_number = '+91 90000 00000'
+  (select admin_whatsapp_number = '9000000000'
       and daily_report_template = 'Report for {{agent}} on {{date}}'
      from public.system_settings where id = true),
-  'admin_update_settings() saves the WhatsApp number and report template');
+  'admin_update_settings() saves the WhatsApp number in its canonical 10-digit '
+  'form and the report template verbatim');
+
+-- A number typed with formatting normalizes the same way, so two admins who
+-- typed the same number differently end up with identical, comparable rows.
+select public.admin_update_settings(null, null, null, '09000000000', null);
+
+select public.zz_expect(
+  (select admin_whatsapp_number = '9000000000' from public.system_settings where id = true),
+  'a leading-zero national number normalizes the same as the +91 form');
+
+select public.zz_expect_error(
+  $q$select public.admin_update_settings(null, null, null, 'not-a-number', null)$q$,
+  'admin_update_settings() rejects a WhatsApp number that is not a number at all');
+
+select public.zz_expect_error(
+  $q$select public.admin_update_settings(null, null, null, '123', null)$q$,
+  'admin_update_settings() rejects a WhatsApp number that is too short');
+
+select public.zz_expect(
+  -- The rejected calls above must not have touched the row — a bad save
+  -- attempt leaves the previously working number in place rather than
+  -- clearing it or leaving it half-written.
+  (select admin_whatsapp_number = '9000000000' from public.system_settings where id = true),
+  'a rejected WhatsApp number leaves the previous value untouched');
 
 select public.admin_update_settings(null, null, null, '', null);
 
