@@ -10,6 +10,8 @@ import { SaleStatusBadge } from "@/components/shared/sale-status-badge";
 import { CallDispositionDrawer } from "@/components/caller/call-disposition-drawer";
 import { LogSaleSheet } from "@/components/caller/log-sale-sheet";
 import { buildWhatsAppLink } from "@/lib/phone";
+// Shared with the /caller server component, which fetches the first page.
+import { QUEUE_PAGE_SIZE } from "@/lib/pipeline";
 import {
   springSoft,
   staggerContainer,
@@ -26,14 +28,6 @@ interface DashboardStats {
   assigned_total: number;
   untouched_new: number;
 }
-
-/**
- * Rows fetched per request. The queue is ordered by queue_rank, so the first
- * page is everything actually actionable — overdue, then due, then untouched
- * new leads. Loading the whole book instead cost 1.3 MB at 2,000 leads on a
- * screen telecallers keep open all day on mobile data.
- */
-export const QUEUE_PAGE_SIZE = 100;
 
 interface CallerQueueClientProps {
   initialLeads: LeadQueueRow[];

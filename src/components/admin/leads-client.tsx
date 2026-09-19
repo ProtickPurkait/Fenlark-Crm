@@ -761,12 +761,24 @@ function CategoryFilter({
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
 
+  // Close on scroll, because the menu is positioned once at open time and a
+  // stale position is worse than no menu.
+  //
+  // The capture phase is what makes this work at all — scroll events do not
+  // bubble, so without it a scroll on the page would never reach window. But
+  // capture also delivers scrolls from *inside* the menu's own list, which
+  // dismissed the menu the instant anyone tried to scroll through a long list
+  // of categories. Self-scrolls are therefore ignored explicitly.
   useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
+    const close = (e: Event) => {
+      if (e.target instanceof Node && menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     window.addEventListener("scroll", close, true);
     return () => window.removeEventListener("scroll", close, true);
   }, [open]);
@@ -826,6 +838,7 @@ function CategoryFilter({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -4, scale: 0.98 }}
                   transition={springSoft}
+                  ref={menuRef}
                   style={{ top: coords.top, left: coords.left, width: 240 }}
                   className="glass-strong fixed z-50 max-h-80 overflow-auto rounded-xl p-1 scrollbar-slim"
                 >
@@ -982,6 +995,7 @@ function AssignMenu({
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const options = useMemo(() => telecallers, [telecallers]);
 
   useEffect(() => setMounted(true), []);
@@ -994,9 +1008,15 @@ function AssignMenu({
 
   // A stale position is worse than no menu — close rather than let it float
   // over the wrong spot once the trigger has scrolled away underneath it.
+  // Scrolls from inside the menu are excluded for the same reason as in
+  // CategoryFilter above: this list is capped at max-h-64, so a team large
+  // enough to overflow it could not otherwise be scrolled through.
   useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
+    const close = (e: Event) => {
+      if (e.target instanceof Node && menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     window.addEventListener("scroll", close, true);
     return () => window.removeEventListener("scroll", close, true);
   }, [open]);
@@ -1028,6 +1048,7 @@ function AssignMenu({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -4, scale: 0.98 }}
                   transition={springSoft}
+                  ref={menuRef}
                   style={{ top: coords.top, left: coords.left }}
                   className="glass-strong fixed z-50 max-h-64 w-52 overflow-auto rounded-xl p-1 scrollbar-slim"
                 >
