@@ -99,7 +99,13 @@ const DEFAULT_TEMPLATE = [
   "Schedules ({{schedules_count}}):",
   "{{schedules}}",
   "",
-  "Appointments ({{appointments_count}}):",
+  // "Upcoming", not "today's": appointments answers "what is still ahead of
+  // me right now", not "what did I book on the report's date" — see the
+  // section below. The label used to just say "Appointments", which read as
+  // scoped to the report the same way the other three sections are, and
+  // that mismatch was the whole finding: a report dated three weeks ago
+  // still listed today's live backlog under a header that gave no hint why.
+  "Upcoming appointments — as of today ({{appointments_count}}):",
   "{{appointments}}",
 ].join("\n");
 

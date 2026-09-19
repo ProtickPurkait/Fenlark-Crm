@@ -87,7 +87,14 @@ export function AttendanceCard({
   }
 
   async function handleGenerateReport() {
-    if (!attendance || generating) return;
+    // busyRef, not the `generating` state alone — the same reason
+    // handleClockIn/handleClockOut use it. setGenerating(true) is async, so
+    // two taps dispatched in the same tick both saw `generating` still false
+    // and could each fire the RPC and open a WhatsApp tab; the second
+    // usually got eaten by the browser's popup blocker, which is what made
+    // this easy to miss.
+    if (!attendance || busyRef.current) return;
+    busyRef.current = true;
     setGenerating(true);
     setError(null);
 
@@ -97,6 +104,7 @@ export function AttendanceCard({
       .rpc("my_daily_report_summary", { p_date: attendance.work_date })
       .single();
 
+    busyRef.current = false;
     setGenerating(false);
 
     if (rpcError || !data) {
