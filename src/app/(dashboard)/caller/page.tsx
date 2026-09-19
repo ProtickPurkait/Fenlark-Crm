@@ -1,11 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/supabase/current-user";
-import { CallerQueueClient, QUEUE_PAGE_SIZE } from "@/components/caller/caller-queue-client";
+import { CallerQueueClient } from "@/components/caller/caller-queue-client";
+import { QUEUE_PAGE_SIZE } from "@/lib/pipeline";
 import { AttendanceCard } from "@/components/caller/attendance-card";
 
 export default async function CallerQueuePage() {
   const userId = await requireUserId();
   const supabase = await createClient();
+
+  // Guard, not paranoia: this exact page shipped with QUEUE_PAGE_SIZE imported
+  // from a "use client" module, where it arrived as a client-reference proxy.
+  // `proxy - 1` is NaN, `.range(0, NaN)` returns no rows, and the count query
+  // still reported the real total — so production showed "Showing 0 of 1006
+  // leads" with an empty queue and nothing anywhere said why. tsc and the
+  // build both passed. Fail loudly instead of serving an empty queue.
+  if (!Number.isInteger(QUEUE_PAGE_SIZE)) {
+    throw new Error(
+      `QUEUE_PAGE_SIZE must be an integer on the server, got ${String(QUEUE_PAGE_SIZE)}. ` +
+        "It has to live in a plain module — see src/lib/pipeline.ts.",
+    );
+  }
 
   const [{ data: leads, count }, { data: settings }, { data: profile }, { data: stats }, { data: sales }, { data: attendance }] =
     await Promise.all([
