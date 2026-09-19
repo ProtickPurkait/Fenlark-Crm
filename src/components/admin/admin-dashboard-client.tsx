@@ -217,7 +217,7 @@ export function AdminDashboardClient({
               variants={staggerContainer(0.04, 0.2)}
               initial="hidden"
               animate="show"
-              className="divide-y divide-border"
+              className="max-h-80 divide-y divide-border overflow-y-auto pr-1"
             >
               {data.recent.map((item) => (
                 // Stacks into two lines on phones. As one row it does not fit:

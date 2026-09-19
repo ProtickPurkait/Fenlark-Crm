@@ -28,7 +28,7 @@ export default async function AdminDashboardPage() {
       .from("lead_history_logs")
       .select("id, event_type, created_at, actor_kind, actor_id, lead_id, to_status")
       .order("created_at", { ascending: false })
-      .limit(8),
+      .limit(50),
     // Degrades to null rather than throwing if migration 1300 has not been
     // applied yet, so the rest of the dashboard still renders.
     supabase.rpc("admin_call_activity"),
