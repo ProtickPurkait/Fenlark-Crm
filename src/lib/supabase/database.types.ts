@@ -503,6 +503,15 @@ export interface Database {
         Args: { p_attendance_id: string; p_clock_out_at: string };
         Returns: Database["public"]["Tables"]["attendance"]["Row"];
       };
+      admin_lead_categories: {
+        Args: Record<string, never>;
+        Returns: {
+          /** null is the uncategorised bucket. */
+          business_type: string | null;
+          lead_count: number;
+          unassigned_count: number;
+        }[];
+      };
       my_daily_report_summary: {
         Args: { p_date: string };
         Returns: {

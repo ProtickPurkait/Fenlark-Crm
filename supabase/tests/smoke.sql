@@ -1206,7 +1206,73 @@ reset role;
 
 
 -- ===========================================================================
-select public.zz_section('15. Anonymous access');
+select public.zz_section('15. Lead categories');
+-- ===========================================================================
+-- Backs the Leads screen's category filter (migration 2200). The options must
+-- come from the whole pool: deriving them from the page on screen would make
+-- a category with no lead on page 1 unreachable through its own filter.
+
+reset role;
+
+insert into public.leads (full_name, phone, status, assigned_to, source, business_type) values
+  ('Cat Lead One',   '9812200001', 'new', '00000000-0000-0000-0000-0000000000c1', 'manual', 'Cafe'),
+  ('Cat Lead Two',   '9812200002', 'new', null,                                   'manual', 'Cafe'),
+  ('Cat Lead Three', '9812200003', 'new', null,                                   'manual', 'Cafe'),
+  ('Cat Lead Four',  '9812200004', 'new', null,                                   'manual', 'Interior Decor'),
+  -- No business_type at all: the uncategorised bucket still has to be
+  -- assignable as a group, so it is returned rather than filtered out.
+  ('Cat Lead Five',  '9812200005', 'new', null,                                   'manual', null);
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+select public.zz_expect(
+  (select lead_count = 3 and unassigned_count = 2
+     from public.admin_lead_categories() where business_type = 'Cafe'),
+  'admin_lead_categories() counts a category''s total and its unassigned subset separately');
+
+select public.zz_expect(
+  (select count(*) = 1 from public.admin_lead_categories()
+    where business_type is null),
+  'leads with no category are returned as their own bucket, not dropped');
+
+-- The ordering invariant itself, rather than naming a winner: earlier
+-- sections leave plenty of leads with no business_type, so the uncategorised
+-- bucket is legitimately the largest here.
+select public.zz_expect(
+  not exists (
+    select 1 from (
+      select lead_count, lag(lead_count) over () as prev
+        from public.admin_lead_categories()
+    ) t
+    where t.prev is not null and t.lead_count > t.prev
+  ),
+  'categories come back largest-first, the order work gets handed out in');
+
+-- An archived lead is out of the pool, so it must stop being offered as
+-- something to assign.
+reset role;
+update public.leads set deleted_at = now() where phone = '9812200003';
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
+select public.zz_expect(
+  (select lead_count = 2 and unassigned_count = 1
+     from public.admin_lead_categories() where business_type = 'Cafe'),
+  'an archived lead drops straight out of its category''s counts');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+
+select public.zz_expect_error(
+  $q$select * from public.admin_lead_categories()$q$,
+  'a telecaller cannot enumerate the lead pool''s categories');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('16. Anonymous access');
 -- ===========================================================================
 
 reset role;

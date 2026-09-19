@@ -12,7 +12,9 @@ import {
   Plus,
   Search,
   Shuffle,
+  Tag,
   Trash2,
+  Check,
   TriangleAlert,
   UserCheck,
   X,
@@ -48,6 +50,17 @@ interface Telecaller {
   full_name: string;
 }
 
+/** One row of admin_lead_categories(). business_type is null for the
+ *  uncategorised bucket, which the UI addresses by the "__none__" sentinel. */
+export interface LeadCategory {
+  business_type: string | null;
+  lead_count: number;
+  unassigned_count: number;
+}
+
+/** URL value standing in for "leads with no category set". */
+const UNCATEGORISED = "__none__";
+
 export function LeadsClient({
   initialRows,
   totalCount,
@@ -55,6 +68,7 @@ export function LeadsClient({
   pageSize,
   pageSizeOptions,
   filters,
+  categories,
   telecallers,
 }: {
   initialRows: AdminLeadRow[];
@@ -62,7 +76,14 @@ export function LeadsClient({
   page: number;
   pageSize: number;
   pageSizeOptions: readonly number[];
-  filters: { status: string; assignment: string; q: string; sort: "asc" | "desc" };
+  filters: {
+    status: string;
+    assignment: string;
+    category: string;
+    q: string;
+    sort: "asc" | "desc";
+  };
+  categories: LeadCategory[];
   telecallers: Telecaller[];
 }) {
   const router = useRouter();
@@ -312,6 +333,17 @@ export function LeadsClient({
         >
           Assigned
         </FilterChip>
+
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+
+        {/* Category is a menu rather than a row of chips: business_type is
+            free text, so an agency can easily have thirty of them and a chip
+            per category would push every other filter off the screen. */}
+        <CategoryFilter
+          categories={categories}
+          value={filters.category}
+          onChange={(next) => pushParams({ category: next })}
+        />
       </motion.div>
 
       {/* Page size + sort. A bigger page size is how a bulk archive/assign
@@ -474,6 +506,29 @@ export function LeadsClient({
           scanning the pipeline on a phone effectively impossible. Same data,
           stacked. The table below takes over from lg: up. */}
       <motion.div variants={staggerItem} className="space-y-2 lg:hidden">
+        {/* Select-all for phones. The only other one lives in the table's
+            <thead>, which is hidden below lg — so on a phone there was no way
+            to select a whole filtered set at all, only to tap rows one by one. */}
+        {rows.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="glass flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left"
+          >
+            <CheckboxVisual checked={allSelected} />
+            <span className="text-sm font-medium">
+              {allSelected ? "Clear selection" : `Select all ${rows.length}`}
+            </span>
+            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+              {selected.size > 0
+                ? `${selected.size} selected`
+                : rows.length < totalCount
+                  ? `${rows.length} of ${totalCount.toLocaleString()} shown`
+                  : null}
+            </span>
+          </button>
+        )}
+
         {rows.map((lead) => (
           <div
             key={lead.id}
@@ -683,6 +738,194 @@ function FilterChip({
   );
 }
 
+/**
+ * Category picker for the Leads filter bar.
+ *
+ * Portaled to <body> for the same reason AssignMenu is: this sits in a row
+ * that animates its own height, and an ancestor's overflow clipping beats any
+ * z-index a plain absolute dropdown could set.
+ *
+ * Counts come from the whole pool, so "Cafe 120 · 45 unassigned" answers the
+ * question an admin is actually asking before they hand work out.
+ */
+function CategoryFilter({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: LeadCategory[];
+  value: string;
+  onChange: (next: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    return () => window.removeEventListener("scroll", close, true);
+  }, [open]);
+
+  const label =
+    value === UNCATEGORISED
+      ? "No category"
+      : value || "All categories";
+
+  function openMenu() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      // Clamped so the menu never hangs off a narrow screen — on a 375px
+      // phone a category chip sitting near the right edge would otherwise
+      // open a 15rem menu straight off the viewport.
+      const width = 240;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      setCoords({ top: rect.bottom + 6, left });
+    }
+    setOpen(true);
+  }
+
+  function choose(next: string | null) {
+    setOpen(false);
+    onChange(next);
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className={cn(
+          "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
+          value
+            ? "bg-[hsl(var(--neon-blue)/0.16)] text-[hsl(var(--neon-blue))] ring-[hsl(var(--neon-blue)/0.4)]"
+            : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
+        )}
+      >
+        <Tag className="h-3 w-3" />
+        {label}
+      </button>
+
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {open && coords && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setOpen(false)}
+                  aria-hidden
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={springSoft}
+                  style={{ top: coords.top, left: coords.left, width: 240 }}
+                  className="glass-strong fixed z-50 max-h-80 overflow-auto rounded-xl p-1 scrollbar-slim"
+                >
+                  <CategoryOption
+                    label="All categories"
+                    selected={!value}
+                    onClick={() => choose(null)}
+                  />
+                  {categories.length === 0 && (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">
+                      No categories yet. Add a business type when importing
+                      leads.
+                    </p>
+                  )}
+                  {categories.map((c) => {
+                    const key = c.business_type ?? UNCATEGORISED;
+                    return (
+                      <CategoryOption
+                        key={key}
+                        label={c.business_type ?? "No category"}
+                        detail={`${c.lead_count.toLocaleString()} · ${c.unassigned_count.toLocaleString()} unassigned`}
+                        selected={value === key}
+                        onClick={() => choose(key)}
+                      />
+                    );
+                  })}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+function CategoryOption({
+  label,
+  detail,
+  selected,
+  onClick,
+}: {
+  label: string;
+  detail?: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent",
+        selected && "bg-accent",
+      )}
+    >
+      <Check
+        className={cn(
+          "h-3.5 w-3.5 shrink-0",
+          selected ? "text-[hsl(var(--neon-blue))]" : "opacity-0",
+        )}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {detail && (
+          <span className="block text-[10px] text-muted-foreground tabular-nums">
+            {detail}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * The tick square on its own, with no click handling.
+ *
+ * Exists so a checkbox can sit inside something that is already a button (the
+ * mobile select-all row) without nesting one button in another — which is
+ * invalid HTML and, worse, fires both handlers for a single tap.
+ */
+function CheckboxVisual({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+        checked
+          ? "border-[hsl(var(--neon-blue))] bg-[hsl(var(--neon-blue))]"
+          : "border-input",
+      )}
+    >
+      {checked && (
+        <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 fill-none stroke-[hsl(var(--background))] stroke-[2.5]">
+          <path d="M2 6l2.5 2.5L10 3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
 function Checkbox({
   checked,
   onChange,
@@ -695,7 +938,14 @@ function Checkbox({
       type="button"
       role="checkbox"
       aria-checked={checked}
-      onClick={onChange}
+      // Every one of these sits inside a row that toggles the same selection
+      // when clicked. Without this the tap ran both handlers and the two
+      // cancelled out, so tapping the checkbox itself appeared to do nothing
+      // while tapping anywhere else on the row worked.
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
       className={cn(
         "flex h-4 w-4 items-center justify-center rounded border transition-colors",
         checked
