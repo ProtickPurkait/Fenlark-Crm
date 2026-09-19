@@ -1420,11 +1420,47 @@ select public.zz_expect(
     where telecaller_id = '00000000-0000-0000-0000-0000000000c2'),
   'a telecaller who never clocked in reports a null gap, not a zero one');
 
+-- admin_telecaller_activity_log(): the drill-down behind those same numbers.
+select public.zz_expect(
+  (select jsonb_array_length(logs) = 24 and jsonb_array_length(calls) = 11
+     from public.admin_telecaller_activity_log(
+       (now() at time zone 'Asia/Kolkata')::date,
+       '00000000-0000-0000-0000-0000000000b1')),
+  'the drill-down returns every disposition and call session behind the summary''s counts');
+
+select public.zz_expect(
+  (select (logs->0->>'created_at')::timestamptz > (logs->1->>'created_at')::timestamptz
+     from public.admin_telecaller_activity_log(
+       (now() at time zone 'Asia/Kolkata')::date,
+       '00000000-0000-0000-0000-0000000000b1')),
+  'the audit entries come back newest first, like the lead-level timeline');
+
+select public.zz_expect(
+  (select calls @> '[{"ended_reason": "sweep", "duration_seconds": null}]'::jsonb
+     from public.admin_telecaller_activity_log(
+       (now() at time zone 'Asia/Kolkata')::date,
+       '00000000-0000-0000-0000-0000000000b1')),
+  'a swept call surfaces with its unknown duration, not a fabricated zero');
+
+select public.zz_expect(
+  (select (select count(*) from jsonb_array_elements(calls) c
+            where c->>'duration_source' = 'manual') = 2
+     from public.admin_telecaller_activity_log(
+       (now() at time zone 'Asia/Kolkata')::date,
+       '00000000-0000-0000-0000-0000000000b2')),
+  'hand-typed call durations are flagged in the drill-down the same way as the summary');
+
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
 
 select public.zz_expect_error(
   $q$select * from public.admin_telecaller_activity((now() at time zone 'Asia/Kolkata')::date)$q$,
   'a telecaller cannot read the team''s activity metrics');
+
+select public.zz_expect_error(
+  $q$select * from public.admin_telecaller_activity_log(
+    (now() at time zone 'Asia/Kolkata')::date,
+    '00000000-0000-0000-0000-0000000000b1')$q$,
+  'a telecaller cannot read another telecaller''s activity drill-down either');
 
 reset role;
 

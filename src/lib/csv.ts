@@ -1,8 +1,34 @@
-// Minimal RFC-4180 CSV reader.
+// Minimal RFC-4180 CSV reader and writer.
 //
 // Hand-rolled rather than pulling in papaparse: lead CSVs are small, and the
 // only tricky parts (quoted fields containing commas or newlines, and the ""
 // escape for a literal quote) are ~30 lines. No dependency, no bundle cost.
+
+/**
+ * Serializes rows into RFC-4180 CSV text, quoting only where needed and
+ * doubling embedded quotes. Leads with a UTF-8 BOM so Excel — which
+ * guesses encoding from the first bytes rather than reading the file as
+ * UTF-8 by default — renders names like "Café" correctly instead of
+ * mangling them.
+ */
+export function toCsv(rows: (string | number)[][]): string {
+  const escape = (cell: string | number) => {
+    const s = String(cell);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return "﻿" + rows.map((row) => row.map(escape).join(",")).join("\r\n");
+}
+
+/** Triggers a browser download of `text` as a file named `filename`. */
+export function downloadCsv(filename: string, text: string): void {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 /** Splits raw CSV text into rows of raw cell strings. */
 export function parseCsv(text: string): string[][] {

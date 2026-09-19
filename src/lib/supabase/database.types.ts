@@ -99,6 +99,37 @@ export interface TelecallerActivityRow {
   dead_count: number;
 }
 
+/** One audit-trail entry from admin_telecaller_activity_log() (migration
+ *  2400) — names are already resolved server-side, unlike LeadHistoryLog. */
+export interface TelecallerActivityLogEntry {
+  id: number;
+  created_at: string;
+  event_type: AuditEvent;
+  lead_id: string;
+  lead_full_name: string;
+  from_status: LeadStatus | null;
+  to_status: LeadStatus | null;
+  from_assignee_name: string | null;
+  to_assignee_name: string | null;
+  remark: string | null;
+  note: string | null;
+  scheduled_at: string | null;
+}
+
+/** One call_sessions row from admin_telecaller_activity_log() (migration
+ *  2400). duration_seconds/duration_source carry the same reliability
+ *  caveat as admin_telecaller_activity()'s talk_seconds. */
+export interface TelecallerActivityCallEntry {
+  id: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  duration_source: CallDurationSource;
+  ended_reason: CallEndedReason | null;
+  lead_id: string;
+  lead_full_name: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -533,6 +564,13 @@ export interface Database {
       admin_telecaller_activity: {
         Args: { p_date: string };
         Returns: TelecallerActivityRow[];
+      };
+      admin_telecaller_activity_log: {
+        Args: { p_date: string; p_telecaller_id: string };
+        Returns: {
+          logs: TelecallerActivityLogEntry[];
+          calls: TelecallerActivityCallEntry[];
+        }[];
       };
       admin_lead_categories: {
         Args: Record<string, never>;

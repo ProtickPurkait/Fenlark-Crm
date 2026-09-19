@@ -1,11 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Info, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Info, TriangleAlert } from "lucide-react";
 import { staggerContainer, staggerItem } from "@/lib/motion";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn } from "@/lib/utils";
-import type { TelecallerActivityRow } from "@/lib/supabase/database.types";
+import type {
+  TelecallerActivityCallEntry,
+  TelecallerActivityLogEntry,
+  TelecallerActivityRow,
+} from "@/lib/supabase/database.types";
 
 // Thresholds for flagging a day as worth a conversation. Deliberately generous:
 // a false alarm costs an admin's trust in the whole screen, and a telecaller
@@ -101,6 +107,39 @@ export function ActivityClient({
     goToDate(d.toISOString().slice(0, 10));
   }
 
+  // Mirrors exactly what's on screen — same formatted durations, same flag
+  // text — rather than raw seconds, so a downloaded report reads the same
+  // way the admin who pulled it already read it.
+  function handleDownloadCsv() {
+    const header = [
+      "Telecaller", "Date", "Clock in", "Clock out", "Clocked",
+      "Logged", "Calls", "Talk", "Median call (s)", "Short calls",
+      "Manual durations", "Longest gap", "Warm", "Converted", "Dead",
+      "First action", "Last action", "Flags",
+    ];
+    const body = rows.map((r) => [
+      r.full_name,
+      date,
+      clockTime(r.clock_in_at, timeZone),
+      clockTime(r.clock_out_at, timeZone),
+      hm(r.clocked_seconds),
+      r.dispositions,
+      r.calls,
+      hm(r.talk_seconds),
+      r.median_call_seconds,
+      r.short_calls,
+      r.manual_duration_count,
+      hm(r.longest_gap_seconds),
+      r.warm_count,
+      r.converted_count,
+      r.dead_count,
+      clockTime(r.first_action_at, timeZone),
+      clockTime(r.last_action_at, timeZone),
+      flagsFor(r).map((f) => f.text).join("; "),
+    ]);
+    downloadCsv(`activity-${date}.csv`, toCsv([header, ...body]));
+  }
+
   return (
     <motion.div
       variants={staggerContainer(0.06)}
@@ -140,6 +179,15 @@ export function ActivityClient({
             className="flex h-9 w-9 items-center justify-center rounded-lg ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-40"
           >
             <ChevronRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadCsv}
+            disabled={rows.length === 0}
+            className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" />
+            CSV
           </button>
         </div>
       </motion.div>
@@ -240,6 +288,12 @@ export function ActivityClient({
                     ))}
                   </div>
                 )}
+
+                <ActivityLogSection
+                  telecallerId={r.telecaller_id}
+                  date={date}
+                  timeZone={timeZone}
+                />
               </div>
             );
           })}
@@ -305,6 +359,158 @@ function Metric({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+type TimelineEntry =
+  | { kind: "log"; at: string; log: TelecallerActivityLogEntry }
+  | { kind: "call"; at: string; call: TelecallerActivityCallEntry };
+
+function mergeTimeline(
+  logs: TelecallerActivityLogEntry[],
+  calls: TelecallerActivityCallEntry[],
+): TimelineEntry[] {
+  const entries: TimelineEntry[] = [
+    ...logs.map((log): TimelineEntry => ({ kind: "log", at: log.created_at, log })),
+    ...calls.map((call): TimelineEntry => ({ kind: "call", at: call.started_at, call })),
+  ];
+  // Newest first, matching the lead-level timeline (AuditTimeline).
+  return entries.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+function describeLog(log: TelecallerActivityLogEntry): string {
+  switch (log.event_type) {
+    case "lead_created":
+      return "Lead created";
+    case "assigned":
+      return `Assigned to ${log.to_assignee_name ?? "Unknown"}`;
+    case "reassigned":
+      return `Reassigned from ${log.from_assignee_name ?? "Unknown"} to ${log.to_assignee_name ?? "Unknown"}`;
+    case "unassigned":
+      return `Unassigned from ${log.from_assignee_name ?? "Unknown"}`;
+    case "sla_revoked":
+      return `System revoked assignment (SLA breach) — was ${log.from_assignee_name ?? "Unknown"}`;
+    case "status_changed":
+      return `Status changed: ${log.from_status ?? "—"} → ${log.to_status ?? "—"}`;
+    case "remark_added":
+      return "Call logged";
+    case "reschedule_set":
+      return `Follow-up scheduled for ${log.scheduled_at ? new Date(log.scheduled_at).toLocaleString() : "—"}`;
+    case "lead_archived":
+      return "Lead archived";
+    default:
+      return log.event_type;
+  }
+}
+
+function describeCall(call: TelecallerActivityCallEntry): string {
+  if (call.ended_reason === "sweep") return "Call ended without reporting back";
+  if (call.duration_seconds === null) return "Call in progress";
+  const suffix = call.duration_source === "manual" ? " (typed by hand)" : "";
+  return `Call · ${hm(call.duration_seconds)}${suffix}`;
+}
+
+/**
+ * Per-telecaller drill-down for one day: the individual audit-trail entries
+ * and calls behind the Logged/Calls numbers on the card above. Fetched on
+ * demand (not with the page load) since most cards on a busy day are never
+ * expanded, and cached per telecaller+date so toggling twice doesn't refetch.
+ */
+function ActivityLogSection({
+  telecallerId,
+  date,
+  timeZone,
+}: {
+  telecallerId: string;
+  date: string;
+  timeZone: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "error" }
+    | { status: "loaded"; entries: TimelineEntry[] }
+  >({ status: "idle" });
+
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (!next || state.status === "loading" || state.status === "loaded") return;
+
+    setState({ status: "loading" });
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("admin_telecaller_activity_log", {
+      p_date: date,
+      p_telecaller_id: telecallerId,
+    });
+
+    if (error) {
+      setState({ status: "error" });
+      return;
+    }
+    if (!data || data.length === 0) {
+      setState({ status: "loaded", entries: [] });
+      return;
+    }
+
+    const row = data[0];
+    setState({ status: "loaded", entries: mergeTimeline(row.logs, row.calls) });
+  }
+
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        {open ? "Hide activity log" : "View activity log"}
+      </button>
+
+      {open && (
+        <div className="mt-2.5">
+          {state.status === "loading" && (
+            <p className="text-xs text-muted-foreground">Loading…</p>
+          )}
+          {state.status === "error" && (
+            <p className="text-xs text-[hsl(var(--neon-rose))]">Could not load the log.</p>
+          )}
+          {state.status === "loaded" && state.entries.length === 0 && (
+            <p className="text-xs text-muted-foreground">Nothing recorded for this day.</p>
+          )}
+          {state.status === "loaded" && state.entries.length > 0 && (
+            <ol className="max-h-72 space-y-2.5 overflow-y-auto pr-1">
+              {state.entries.map((entry) => (
+                <li
+                  key={`${entry.kind}-${entry.kind === "log" ? entry.log.id : entry.call.id}`}
+                  className="text-xs"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium leading-snug text-foreground">
+                      {entry.kind === "log" ? describeLog(entry.log) : describeCall(entry.call)}
+                    </span>
+                    <time className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {clockTime(entry.at, timeZone)}
+                    </time>
+                  </div>
+                  <div className="text-muted-foreground">
+                    {entry.kind === "log" ? entry.log.lead_full_name : entry.call.lead_full_name}
+                  </div>
+                  {entry.kind === "log" && entry.log.remark && (
+                    <p className="mt-1 rounded-md border border-border bg-muted px-2 py-1.5 text-foreground/80">
+                      {entry.log.remark}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
     </div>
   );
 }
