@@ -140,6 +140,10 @@ export function CallDispositionDrawer({
   // The session the duration above belongs to, kept so an edited value can be
   // written back against the right row when the disposition is saved.
   const [callSessionId, setCallSessionId] = useState<string | null>(null);
+  // Device-measured durations are not editable — end_call_session() ignores a
+  // manual correction against one anyway, so the input is hidden entirely
+  // rather than shown and silently failing to save an edit.
+  const [callSource, setCallSource] = useState<"app_estimate" | "device" | null>(null);
   const autoSecondsRef = useRef<number | null>(null);
 
   const {
@@ -149,9 +153,10 @@ export function CallDispositionDrawer({
     endCall,
     correctDuration,
   } = useCallSession({
-    onCallEnded: ({ sessionId, durationSeconds }) => {
+    onCallEnded: ({ sessionId, durationSeconds, source }) => {
       setCallSessionId(sessionId);
       setCallSeconds(durationSeconds);
+      setCallSource(source);
       autoSecondsRef.current = durationSeconds;
     },
   });
@@ -175,6 +180,7 @@ export function CallDispositionDrawer({
     // to the next lead would attribute one call's time to another.
     setCallSeconds(null);
     setCallSessionId(null);
+    setCallSource(null);
     autoSecondsRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead?.id]);
@@ -261,11 +267,14 @@ export function CallDispositionDrawer({
 
     // Persist a hand-edited duration. Only when it actually differs from what
     // was measured — an untouched value is already stored, and rewriting it
-    // would relabel an automatic measurement as a manual one.
+    // would relabel an automatic measurement as a manual one. Never for a
+    // device-measured call: the UI never offers an edit for one (see below),
+    // and the backend would ignore the correction anyway.
     if (
       callSessionId &&
       callSeconds !== null &&
-      callSeconds !== autoSecondsRef.current
+      callSeconds !== autoSecondsRef.current &&
+      callSource === "app_estimate"
     ) {
       await correctDuration(callSessionId, callSeconds);
     }
@@ -504,27 +513,37 @@ export function CallDispositionDrawer({
                     <Phone className="h-4 w-4 shrink-0 text-[hsl(var(--neon-emerald))]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-muted-foreground">
-                        Call duration recorded
+                        {callSource === "device"
+                          ? "Call duration — measured automatically"
+                          : "Call duration recorded"}
                       </p>
                       <p className="text-sm font-medium text-[hsl(var(--neon-emerald))]">
                         {formatDurationLabel(callSeconds)}
                       </p>
                     </div>
-                    {/* Editable: the measurement includes ringing time, so the
-                        telecaller gets the last word on what is recorded. */}
-                    <input
-                      type="number"
-                      min={0}
-                      max={14400}
-                      step={1}
-                      aria-label="Call duration in seconds"
-                      value={callSeconds}
-                      onChange={(e) =>
-                        setCallSeconds(Math.max(0, Number(e.target.value) || 0))
-                      }
-                      className="h-9 w-20 shrink-0 rounded-md border border-border bg-card px-2 text-center font-mono text-sm [color-scheme:light]"
-                    />
-                    <span className="shrink-0 text-xs text-muted-foreground">sec</span>
+                    {callSource === "app_estimate" ? (
+                      // Editable: the measurement includes ringing time, so
+                      // the telecaller gets the last word on what is
+                      // recorded. Device-measured calls skip this entirely —
+                      // see callSource above.
+                      <>
+                        <input
+                          type="number"
+                          min={0}
+                          max={14400}
+                          step={1}
+                          aria-label="Call duration in seconds"
+                          value={callSeconds}
+                          onChange={(e) =>
+                            setCallSeconds(Math.max(0, Number(e.target.value) || 0))
+                          }
+                          className="h-9 w-20 shrink-0 rounded-md border border-border bg-card px-2 text-center font-mono text-sm [color-scheme:light]"
+                        />
+                        <span className="shrink-0 text-xs text-muted-foreground">sec</span>
+                      </>
+                    ) : (
+                      <Check className="h-4 w-4 shrink-0 text-[hsl(var(--neon-emerald))]" />
+                    )}
                   </div>
                 </motion.div>
               )}

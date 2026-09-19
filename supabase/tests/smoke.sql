@@ -630,6 +630,12 @@ select public.zz_expect(
     where lead_id = '00000000-0000-0000-0000-0000000000d2') = 137,
   'ending an already-ended session is a no-op, not an overwrite');
 
+select public.zz_expect_error(
+  $q$select public.end_call_session(
+    (select id from public.call_sessions where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+    10, 'bogus')$q$,
+  'an unrecognised duration source is rejected outright');
+
 -- An implausible duration is discarded rather than poisoning the averages.
 select public.start_call_session('00000000-0000-0000-0000-0000000000d1');
 select public.end_call_session(
@@ -693,6 +699,38 @@ select public.zz_expect(
 select public.zz_expect(
   jsonb_array_length((select active from public.admin_call_activity())) = 0,
   'admin_call_activity reports no active calls once everything is ended or swept');
+
+-- Migration 2600. Run after the talk_seconds checks above (not before): this
+-- mutates d2's already-closed session, and an earlier placement would have
+-- thrown off the 137 total those checks depend on. Still authenticated as
+-- the admin (a1) from the block just above — end_call_session() allows that
+-- the same way it allows a caller to end their own session.
+select public.end_call_session(
+  (select id from public.call_sessions where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  142, 'device');
+
+select public.zz_expect(
+  (select duration_seconds = 142 and duration_source = 'device'
+     from public.call_sessions
+    where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  'a device-measured duration overwrites the app_estimate that closed the same session first');
+
+-- Once a session is device-sourced it is final: neither a duplicate device
+-- event nor a manual correction can overwrite it. The app should never even
+-- offer a manual edit for one (call-disposition-drawer.tsx), but this is the
+-- actual backstop.
+select public.end_call_session(
+  (select id from public.call_sessions where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  999, 'device');
+select public.end_call_session(
+  (select id from public.call_sessions where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  1, 'manual');
+
+select public.zz_expect(
+  (select duration_seconds = 142 and duration_source = 'device'
+     from public.call_sessions
+    where lead_id = '00000000-0000-0000-0000-0000000000d2'),
+  'a device-sourced duration is final — neither a duplicate device event nor a manual correction can overwrite it');
 
 reset role;
 

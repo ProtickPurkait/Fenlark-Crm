@@ -46,7 +46,7 @@ export type AuditEvent =
 
 /** Where a call's duration came from. 'provider' is reserved for a future
  *  cloud-telephony integration writing exact values into the same table. */
-export type CallDurationSource = "app_estimate" | "manual" | "provider";
+export type CallDurationSource = "app_estimate" | "manual" | "device" | "provider";
 
 /** 'superseded' = caller started another call; 'sweep' = the app never
  *  reported back and pg_cron closed it (duration is null in that case). */
