@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { ChevronDown, ChevronLeft, ChevronRight, Info, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Info, TriangleAlert } from "lucide-react";
 import { staggerContainer, staggerItem } from "@/lib/motion";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn } from "@/lib/utils";
 import type {
   TelecallerActivityCallEntry,
@@ -106,6 +107,39 @@ export function ActivityClient({
     goToDate(d.toISOString().slice(0, 10));
   }
 
+  // Mirrors exactly what's on screen — same formatted durations, same flag
+  // text — rather than raw seconds, so a downloaded report reads the same
+  // way the admin who pulled it already read it.
+  function handleDownloadCsv() {
+    const header = [
+      "Telecaller", "Date", "Clock in", "Clock out", "Clocked",
+      "Logged", "Calls", "Talk", "Median call (s)", "Short calls",
+      "Manual durations", "Longest gap", "Warm", "Converted", "Dead",
+      "First action", "Last action", "Flags",
+    ];
+    const body = rows.map((r) => [
+      r.full_name,
+      date,
+      clockTime(r.clock_in_at, timeZone),
+      clockTime(r.clock_out_at, timeZone),
+      hm(r.clocked_seconds),
+      r.dispositions,
+      r.calls,
+      hm(r.talk_seconds),
+      r.median_call_seconds,
+      r.short_calls,
+      r.manual_duration_count,
+      hm(r.longest_gap_seconds),
+      r.warm_count,
+      r.converted_count,
+      r.dead_count,
+      clockTime(r.first_action_at, timeZone),
+      clockTime(r.last_action_at, timeZone),
+      flagsFor(r).map((f) => f.text).join("; "),
+    ]);
+    downloadCsv(`activity-${date}.csv`, toCsv([header, ...body]));
+  }
+
   return (
     <motion.div
       variants={staggerContainer(0.06)}
@@ -145,6 +179,15 @@ export function ActivityClient({
             className="flex h-9 w-9 items-center justify-center rounded-lg ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-40"
           >
             <ChevronRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadCsv}
+            disabled={rows.length === 0}
+            className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm ring-1 ring-border transition-colors hover:bg-accent disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" />
+            CSV
           </button>
         </div>
       </motion.div>
