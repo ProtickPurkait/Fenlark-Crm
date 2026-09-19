@@ -72,6 +72,33 @@ export interface DailyReportLead {
   scheduled_at?: string | null;
 }
 
+/** One row of admin_telecaller_activity() (migration 2300).
+ *
+ *  Reliability differs sharply between these columns and the UI says so:
+ *  longest_gap_seconds derives from the append-only audit trail, while
+ *  talk_seconds is an app estimate the telecaller can edit — which is what
+ *  manual_duration_count exists to qualify. */
+export interface TelecallerActivityRow {
+  telecaller_id: string;
+  full_name: string;
+  clock_in_at: string | null;
+  clock_out_at: string | null;
+  clocked_seconds: number;
+  first_action_at: string | null;
+  last_action_at: string | null;
+  /** Null when the telecaller never clocked in — no shift to measure against. */
+  longest_gap_seconds: number | null;
+  calls: number;
+  talk_seconds: number;
+  median_call_seconds: number;
+  short_calls: number;
+  manual_duration_count: number;
+  dispositions: number;
+  warm_count: number;
+  converted_count: number;
+  dead_count: number;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -492,6 +519,29 @@ export interface Database {
       caller_clock_out: {
         Args: Record<string, never>;
         Returns: Database["public"]["Tables"]["attendance"]["Row"];
+      };
+      /** setof, so it returns zero rows rather than a row of nulls when the
+       *  telecaller has no current shift — see migration 2100. */
+      my_current_attendance: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["attendance"]["Row"][];
+      };
+      admin_close_attendance: {
+        Args: { p_attendance_id: string; p_clock_out_at: string };
+        Returns: Database["public"]["Tables"]["attendance"]["Row"];
+      };
+      admin_telecaller_activity: {
+        Args: { p_date: string };
+        Returns: TelecallerActivityRow[];
+      };
+      admin_lead_categories: {
+        Args: Record<string, never>;
+        Returns: {
+          /** null is the uncategorised bucket. */
+          business_type: string | null;
+          lead_count: number;
+          unassigned_count: number;
+        }[];
       };
       my_daily_report_summary: {
         Args: { p_date: string };

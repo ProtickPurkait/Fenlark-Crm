@@ -29,6 +29,9 @@ export default async function AdminLeadsPage({
   const status = typeof params.status === "string" ? params.status : "all";
   const assignment = typeof params.assignment === "string" ? params.assignment : "all";
   const q = typeof params.q === "string" ? params.q.trim() : "";
+  // "__none__" is the uncategorised bucket. A sentinel rather than an empty
+  // value because an empty query param is indistinguishable from "no filter".
+  const category = typeof params.category === "string" ? params.category : "";
   const page = Math.max(1, Number(params.page) || 1);
   const sort = params.sort === "asc" ? "asc" : "desc";
   const pageSize =
@@ -50,6 +53,11 @@ export default async function AdminLeadsPage({
   if (assignment === "unassigned") query = query.is("assigned_to", null);
   if (assignment === "assigned") query = query.not("assigned_to", "is", null);
 
+  // Category. admin_import_leads() nullifs blank business_type on the way in,
+  // so uncategorised is exactly "is null" — no empty-string case to cover.
+  if (category === "__none__") query = query.is("business_type", null);
+  else if (category) query = query.eq("business_type", category);
+
   if (q) {
     // Phone search matches on digits typed, name search is a simple ilike —
     // good enough at CRM-lead volumes without adding full-text search.
@@ -67,7 +75,7 @@ export default async function AdminLeadsPage({
     ...new Set((leads ?? []).map((l) => l.assigned_to).filter(Boolean)),
   ] as string[];
 
-  const [{ data: assignees }, { data: telecallers }] = await Promise.all([
+  const [{ data: assignees }, { data: telecallers }, { data: categories }] = await Promise.all([
     assignedIds.length
       ? supabase.from("telecaller_directory").select("id, full_name").in("id", assignedIds)
       : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
@@ -80,6 +88,9 @@ export default async function AdminLeadsPage({
       .eq("role", "telecaller")
       .eq("is_active", true)
       .order("full_name", { ascending: true }),
+    // Every category in the pool, not just the ones on this page — a category
+    // absent from page 1 would otherwise be unreachable through its own filter.
+    supabase.rpc("admin_lead_categories"),
   ]);
 
   const assigneeMap = Object.fromEntries((assignees ?? []).map((a) => [a.id, a.full_name]));
@@ -95,13 +106,14 @@ export default async function AdminLeadsPage({
       // its internal state (row selection, the search box, any in-flight
       // busy flag) always starts clean rather than carrying a selection of
       // ids that belonged to a different page or filter.
-      key={`${page}-${status}-${assignment}-${q}-${pageSize}-${sort}`}
+      key={`${page}-${status}-${assignment}-${category}-${q}-${pageSize}-${sort}`}
       initialRows={rows}
       totalCount={count ?? 0}
       page={page}
       pageSize={pageSize}
       pageSizeOptions={PAGE_SIZE_OPTIONS}
-      filters={{ status, assignment, q, sort }}
+      filters={{ status, assignment, category, q, sort }}
+      categories={categories ?? []}
       telecallers={(telecallers ?? []).map(({ id, full_name }) => ({ id, full_name }))}
     />
   );
