@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A superseded run tells you nothing useful, and minutes are finite.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types, database, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npx tsc --noEmit
+
+      # Applies every migration and runs the full smoke suite against a real
+      # Postgres compiled to WASM. No service container, no Supabase CLI.
+      - name: Database
+        run: npm run db:test
+
+      # No NEXT_PUBLIC_SUPABASE_* here on purpose: next.config.ts falls back to
+      # an empty string, and a build that needs secrets is a build nobody can
+      # verify from a fork.
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: Pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Chromium only — that is the one project playwright.config.ts defines,
+      # and pulling the other two engines would triple the download for no
+      # extra coverage.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # This builds the app itself (see webServer in playwright.config.ts) and
+      # points it at e2e/stub-supabase.mjs, so it needs no credentials and no
+      # network beyond the checkout.
+      - name: End-to-end
+        run: npm run test:e2e
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
