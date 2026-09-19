@@ -54,6 +54,47 @@ const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "dead", label: "Dead / Not Interested" },
 ];
 
+/**
+ * One-tap call outcomes, shown above the remark box.
+ *
+ * Typing a remark by hand between calls is the slowest part of a telecaller's
+ * loop, and the great majority of calls end in one of a handful of outcomes.
+ * Each preset therefore fills in everything that outcome implies, not just the
+ * text: the pipeline status it means, and — for the call-back ones — a
+ * follow-up slot, since `rescheduled` is rejected without one.
+ *
+ * `status` is deliberately applied on top of whatever is selected. A caller
+ * who taps "Not interested" means the lead is dead, and the Select visibly
+ * updates, so the change is neither hidden nor hard to undo.
+ */
+const QUICK_REMARKS: {
+  label: string;
+  remark: string;
+  status: LeadStatus;
+  /** Days ahead to prefill Next Follow-Up, at the current time of day. */
+  scheduleInDays?: number;
+}[] = [
+  { label: "Busy", remark: "Busy, asked to call later", status: "attempted" },
+  { label: "No answer", remark: "Rang out, no answer", status: "attempted" },
+  { label: "Switched off", remark: "Phone switched off", status: "attempted" },
+  {
+    label: "Call tomorrow",
+    remark: "Asked me to call tomorrow",
+    status: "rescheduled",
+    scheduleInDays: 1,
+  },
+  {
+    label: "Call next week",
+    remark: "Asked me to call next week",
+    status: "rescheduled",
+    scheduleInDays: 7,
+  },
+  { label: "Sent details", remark: "Sent details on WhatsApp", status: "connected" },
+  { label: "Interested", remark: "Interested, wants more details", status: "warm" },
+  { label: "Not interested", remark: "Not interested", status: "dead" },
+  { label: "Wrong number", remark: "Wrong number", status: "dead" },
+];
+
 interface CallDispositionDrawerProps {
   lead: LeadQueueRow | null;
   open: boolean;
@@ -143,6 +184,27 @@ export function CallDispositionDrawer({
   const requiresSchedule = status === "rescheduled";
   // Feeds the input's `min`, so the native picker will not offer a past slot.
   const nowLocal = toDatetimeLocal(new Date().toISOString());
+
+  function applyQuickRemark(preset: (typeof QUICK_REMARKS)[number]) {
+    // Append rather than overwrite: a caller who has already typed a detail
+    // ("owner out of town") should be able to add "Call next week" to it
+    // without losing what they wrote. Tapping two presets reads naturally as
+    // one sentence for the same reason.
+    setRemark((prev) => {
+      const base = prev.trim();
+      if (!base) return preset.remark;
+      return `${base.replace(/[.\s]+$/, "")}. ${preset.remark}`;
+    });
+    setStatus(preset.status);
+
+    if (preset.scheduleInDays !== undefined) {
+      const when = new Date();
+      when.setDate(when.getDate() + preset.scheduleInDays);
+      setScheduledAt(toDatetimeLocal(when.toISOString()));
+    }
+    // Clears "A remark is required." the moment the tap makes it untrue.
+    setError(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -472,13 +534,31 @@ export function CallDispositionDrawer({
               <Label htmlFor="remark" className="text-xs uppercase tracking-wider text-muted-foreground">
                 Call Remarks
               </Label>
+
+              {/* type="button" is load-bearing: the default inside a <form> is
+                  submit, so without it every tap would try to log the call. */}
+              <div className="flex flex-wrap gap-1.5 pb-0.5">
+                {QUICK_REMARKS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => applyQuickRemark(preset)}
+                    // 32px tall rather than the 24px a desktop chip would be:
+                    // this is tapped with a thumb, mid-call, on a phone.
+                    className="h-8 rounded-full px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground active:bg-accent"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
               <Textarea
                 id="remark"
                 rows={3}
                 required
                 value={remark}
                 onChange={(e) => setRemark(e.target.value)}
-                placeholder="Client requested a quote for web design…"
+                placeholder="Tap an outcome above, or type your own…"
               />
             </motion.div>
 
