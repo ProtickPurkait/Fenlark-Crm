@@ -2,14 +2,14 @@
 
 import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Loader2, RotateCw, TriangleAlert } from "lucide-react";
+import { Check, Info, Loader2, RotateCw, TriangleAlert } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { fillTemplate } from "@/lib/phone";
-import { buildReportMessage } from "@/lib/daily-report";
+import { fillTemplate, normalizePhone } from "@/lib/phone";
+import { buildReportMessage, templateOmitsLeadLists } from "@/lib/daily-report";
 import { springSoft, staggerContainer, staggerItem } from "@/lib/motion";
 import type { SystemSettings } from "@/lib/supabase/database.types";
 
@@ -68,6 +68,14 @@ export function SettingsClient({
       setError("The daily report template cannot be empty.");
       return;
     }
+    // Mirrors admin_update_settings()'s own check (migration 2400) so a typo
+    // is caught here, immediately, instead of round-tripping to the database
+    // first. An empty field is not an error here — it's the deliberate
+    // "leave the Generate Report button disabled" state.
+    if (adminWhatsapp.trim() !== "" && normalizePhone(adminWhatsapp).length !== 10) {
+      setError("Enter a valid 10-digit WhatsApp number, with or without +91.");
+      return;
+    }
 
     savingRef.current = true;
     setSaving(true);
@@ -94,7 +102,12 @@ export function SettingsClient({
       setError(
         rpcError.message.includes("forbidden")
           ? "Your account no longer has admin rights. Sign out and back in."
-          : "Could not save settings. Check your connection and try again.",
+          // Defense in depth: the check above should already have caught
+          // this, but the database is the actual authority, and a raw
+          // Postgres error string must never reach the screen.
+          : rpcError.message.includes("WhatsApp number")
+            ? "Enter a valid 10-digit WhatsApp number, with or without +91."
+            : "Could not save settings. Check your connection and try again.",
       );
       return;
     }
@@ -333,6 +346,23 @@ export function SettingsClient({
             rows={10}
             className="resize-none font-mono text-sm"
           />
+
+          {/* Informational, not a warning: a template with no lead-list
+              tokens is a legitimate choice (a shorter, counts-only report),
+              not a mistake. buildReportMessage() used to silently rewrite a
+              template like this back to the full default on every send —
+              this says what will actually happen instead of doing that. */}
+          {templateOmitsLeadLists(reportTemplate) && (
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              This template doesn&apos;t use any of the{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                {"{{warm}}"}
+              </code>
+              -style tokens, so the report will show counts only — no lead
+              names or phone numbers.
+            </p>
+          )}
         </div>
 
         <div className="mt-3 rounded-lg border border-border bg-muted p-3">
