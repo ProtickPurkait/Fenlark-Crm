@@ -194,6 +194,14 @@ It is built, not dev-served, and never reuses a running server. The failure
 being guarded against was a build-time transform, so testing a dev server —
 or a server left over from the previous run — tests the wrong artifact.
 
+### Both layers, on every pull request
+
+`.github/workflows/ci.yml` runs lint, types, the database suite and a build in
+one job, and the browser tests in another. Neither needs a secret: the build
+falls back to an empty Supabase URL and the browser tests talk to the stub, so
+a pull request from a fork is checked exactly like one from a branch. A failed
+browser run uploads its Playwright report as an artifact.
+
 ## Deploying
 
 ### Hosted project (recommended)
