@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageCircle } from "lucide-react";
 import { MotionButton } from "@/components/ui/motion-button";
@@ -12,6 +13,15 @@ import { LogSaleSheet } from "@/components/caller/log-sale-sheet";
 import { buildWhatsAppLink } from "@/lib/phone";
 // Shared with the /caller server component, which fetches the first page.
 import { QUEUE_PAGE_SIZE } from "@/lib/pipeline";
+import {
+  applyQueueFilters,
+  hasActiveQueueFilter,
+  DUE_FILTERS,
+  QUEUE_STATUS_FILTERS,
+  STATUS_FILTER_LABELS,
+  type DueFilter,
+  type QueueFilters,
+} from "@/lib/queue-filters";
 import {
   springSoft,
   staggerContainer,
@@ -32,6 +42,7 @@ interface DashboardStats {
 interface CallerQueueClientProps {
   initialLeads: LeadQueueRow[];
   totalLeads: number;
+  filters: QueueFilters;
   whatsappTemplate: string;
   agentName: string;
   initialStats: DashboardStats | null;
@@ -41,11 +52,16 @@ interface CallerQueueClientProps {
 export function CallerQueueClient({
   initialLeads,
   totalLeads,
+  filters,
   whatsappTemplate,
   agentName,
   initialStats,
   initialSaleStatusByLead,
 }: CallerQueueClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [leads, setLeads] = useState(initialLeads);
   const [total, setTotal] = useState(totalLeads);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -73,12 +89,14 @@ export function CallerQueueClient({
     // not watch two of them disappear.
     const windowSize = Math.max(leads.length, QUEUE_PAGE_SIZE);
     const [{ data: freshLeads, count }, { data: freshStats }, { data: freshSales }] = await Promise.all([
-      supabase
-        .from("lead_queue")
-        .select("*", { count: "exact" })
-        .order("queue_rank", { ascending: true })
-        .order("scheduled_at", { ascending: true, nullsFirst: false })
-        .range(0, windowSize - 1),
+      applyQueueFilters(
+        supabase
+          .from("lead_queue")
+          .select("*", { count: "exact" })
+          .order("queue_rank", { ascending: true })
+          .order("scheduled_at", { ascending: true, nullsFirst: false }),
+        filters,
+      ).range(0, windowSize - 1),
       supabase.rpc("my_dashboard_stats"),
       supabase.from("sales").select("lead_id, status").in("status", ["pending", "approved"]),
     ]);
@@ -94,18 +112,32 @@ export function CallerQueueClient({
     }
   }
 
+  function setFilter(next: Partial<QueueFilters>) {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(next)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
+    // Navigating remounts this component with a fresh first page from the
+    // server, so there is no local list state to reconcile — the same reason
+    // the admin lead list drives its filters through the URL.
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
   async function loadMore() {
     if (loadingMore) return;
     setLoadingMore(true);
 
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
-    const { data: nextPage, count } = await supabase
-      .from("lead_queue")
-      .select("*", { count: "exact" })
-      .order("queue_rank", { ascending: true })
-      .order("scheduled_at", { ascending: true, nullsFirst: false })
-      .range(leads.length, leads.length + QUEUE_PAGE_SIZE - 1);
+    const { data: nextPage, count } = await applyQueueFilters(
+      supabase
+        .from("lead_queue")
+        .select("*", { count: "exact" })
+        .order("queue_rank", { ascending: true })
+        .order("scheduled_at", { ascending: true, nullsFirst: false }),
+      filters,
+    ).range(leads.length, leads.length + QUEUE_PAGE_SIZE - 1);
 
     setLoadingMore(false);
     if (typeof count === "number") setTotal(count);
@@ -139,6 +171,43 @@ export function CallerQueueClient({
         <StatTile label="Untouched" value={stats?.untouched_new ?? 0} accent="amber" />
       </motion.div>
 
+      {/* Horizontally scrollable on a phone rather than wrapping to four rows
+          and pushing the actual leads below the fold. -mx-4/px-4 lets the row
+          bleed to the screen edges so it reads as scrollable. */}
+      <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-slim sm:mx-0 sm:flex-wrap sm:px-0">
+        <QueueChip
+          active={!hasActiveQueueFilter(filters)}
+          onClick={() => setFilter({ status: "", due: "" })}
+        >
+          All
+        </QueueChip>
+
+        {(Object.keys(DUE_FILTERS) as DueFilter[]).map((key) => (
+          <QueueChip
+            key={key}
+            active={filters.due === key}
+            // Due and status are independent axes, but only one due filter at
+            // a time: tapping the active one clears it.
+            onClick={() => setFilter({ due: filters.due === key ? "" : key })}
+            urgent={key === "overdue"}
+          >
+            {DUE_FILTERS[key].label}
+          </QueueChip>
+        ))}
+
+        <span className="mx-0.5 my-1 w-px shrink-0 self-stretch bg-border" aria-hidden />
+
+        {QUEUE_STATUS_FILTERS.map((st) => (
+          <QueueChip
+            key={st}
+            active={filters.status === st}
+            onClick={() => setFilter({ status: filters.status === st ? "" : st })}
+          >
+            {STATUS_FILTER_LABELS[st]}
+          </QueueChip>
+        ))}
+      </div>
+
       {leads.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -146,10 +215,33 @@ export function CallerQueueClient({
           transition={springSoft}
           className="glass rounded-2xl px-6 py-16 text-center"
         >
-          <p className="text-sm font-medium">Your queue is clear</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            New assignments will appear here automatically.
-          </p>
+          {/* Never claim the queue is clear when a filter is simply hiding it
+              — that reads as "you are done for the day" and it is the exact
+              moment a telecaller would stop working. */}
+          {hasActiveQueueFilter(filters) ? (
+            <>
+              <p className="text-sm font-medium">No leads match this filter</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                You have {totalLeads.toLocaleString()} lead
+                {totalLeads === 1 ? "" : "s"} in total.
+              </p>
+              <MotionButton
+                variant="glass"
+                size="sm"
+                className="mt-4"
+                onClick={() => setFilter({ status: "", due: "" })}
+              >
+                Show all leads
+              </MotionButton>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Your queue is clear</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                New assignments will appear here automatically.
+              </p>
+            </>
+          )}
         </motion.div>
       ) : (
         // `layout` on the list + items means a lead that changes rank after a
@@ -288,6 +380,37 @@ export function CallerQueueClient({
         onLogged={refetch}
       />
     </div>
+  );
+}
+
+function QueueChip({
+  active,
+  onClick,
+  urgent,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  urgent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // h-8 and shrink-0: thumbed on a phone, and a chip must never compress
+      // to an unreadable sliver inside the scrolling row.
+      className={cn(
+        "h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-medium ring-1 transition-colors",
+        active
+          ? "bg-[hsl(var(--neon-blue)/0.16)] text-[hsl(var(--neon-blue))] ring-[hsl(var(--neon-blue)/0.4)]"
+          : urgent
+            ? "text-[hsl(var(--neon-rose))] ring-[hsl(var(--neon-rose)/0.3)] hover:bg-[hsl(var(--neon-rose)/0.08)]"
+            : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -1393,7 +1393,64 @@ reset role;
 
 
 -- ===========================================================================
-select public.zz_section('17. Anonymous access');
+select public.zz_section('17. Queue follow-up buckets');
+-- ===========================================================================
+-- The telecaller queue's filters are expressed over lead_queue's
+-- follow_up_bucket rather than over scheduled_at directly, so "overdue" means
+-- one thing on the card badge and in the filter. That only holds while these
+-- bucket values stay as they are — change a threshold in the view and every
+-- filter silently changes meaning with no other test noticing.
+
+reset role;
+
+insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+values ('00000000-0000-0000-0000-0000000000b3', '00000000-0000-0000-0000-000000000000',
+        'authenticated','authenticated','queue@fenlark.test','{}','{"full_name":"Queue Qadir"}',now(),now());
+
+insert into public.leads (full_name, phone, status, assigned_to, assigned_at, source, scheduled_at) values
+  ('Bucket Overdue',     '9814400001','rescheduled','00000000-0000-0000-0000-0000000000b3',now(),'manual', now() - interval '2 hours'),
+  ('Bucket Due Soon',    '9814400003','rescheduled','00000000-0000-0000-0000-0000000000b3',now(),'manual', now() + interval '1 hour'),
+  ('Bucket Due Today',   '9814400004','rescheduled','00000000-0000-0000-0000-0000000000b3',now(),'manual', now() + interval '12 hours'),
+  ('Bucket Scheduled',   '9814400005','rescheduled','00000000-0000-0000-0000-0000000000b3',now(),'manual', now() + interval '5 days'),
+  ('Bucket Unscheduled', '9814400006','new',        '00000000-0000-0000-0000-0000000000b3',now(),'manual', null),
+  ('Bucket Converted',   '9814400008','converted',  '00000000-0000-0000-0000-0000000000b3',now(),'manual', null);
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000b3"}', true);
+
+select public.zz_expect(
+  (select follow_up_bucket from public.lead_queue where full_name = 'Bucket Overdue') = 'overdue',
+  'a follow-up in the past buckets as overdue, which is what the Overdue filter selects');
+
+-- The Due today filter deliberately selects both of these: a telecaller
+-- asking "what is due today" means the next few hours as well as the rest of
+-- the day, not two separate lists.
+select public.zz_expect(
+  (select count(*) from public.lead_queue
+    where full_name in ('Bucket Due Soon', 'Bucket Due Today')
+      and follow_up_bucket in ('due_soon', 'due_today')) = 2,
+  'imminent and same-day follow-ups both fall inside the Due today filter');
+
+select public.zz_expect(
+  (select follow_up_bucket from public.lead_queue where full_name = 'Bucket Scheduled') = 'scheduled',
+  'a follow-up days out is scheduled, and so stays out of Due today');
+
+select public.zz_expect(
+  (select follow_up_bucket from public.lead_queue where full_name = 'Bucket Unscheduled') = 'unscheduled',
+  'a lead with no follow-up date buckets as unscheduled');
+
+-- Closed leads must not surface under any follow-up filter: a converted lead
+-- is not work, and showing it under "No follow-up" would send a telecaller
+-- back to a customer who has already bought.
+select public.zz_expect(
+  (select follow_up_bucket from public.lead_queue where full_name = 'Bucket Converted') = 'closed',
+  'a converted lead buckets as closed, so no follow-up filter can surface it');
+
+reset role;
+
+
+-- ===========================================================================
+select public.zz_section('18. Anonymous access');
 -- ===========================================================================
 
 reset role;
