@@ -468,6 +468,70 @@ select public.zz_expect(
        "alternate_phone":"9811100098"}]'::jsonb)) = 1,
   'alternate_phone matching another lead''s primary phone is not a duplicate conflict');
 
+-- Migration 2800: the exact bug a real re-import hit. A lead imported before
+-- the website-audit fields existed (or from a plain CSV with no audit
+-- columns) stays correctly untouched by a second admin_import_leads() call
+-- for the SAME phone — ON CONFLICT DO NOTHING is right for every other
+-- field. But that also means the research data in that second upload has
+-- nowhere to go via the insert path alone; admin_backfill_lead_research()
+-- is what actually attaches it.
+select public.admin_import_leads(
+  '[{"full_name":"Legacy Lead","phone":"9811100093","business_type":"Cafe"}]'::jsonb);
+
+select public.zz_expect(
+  (select website is null and observed_opportunity is null and website_issues is null
+     from public.leads where phone = '9811100093'),
+  'a lead imported before the audit fields existed has them null, as expected');
+
+select public.zz_expect(
+  (select inserted from public.admin_import_leads(
+    '[{"full_name":"Legacy Lead","phone":"9811100093",
+       "website":"http://legacy-cafe.test/",
+       "observed_opportunity":"Website returns error HTTP 404"}]'::jsonb)) = 0,
+  're-importing the same phone with new research data still inserts nothing (correct — this is a duplicate)');
+
+select public.zz_expect(
+  (select website is null and observed_opportunity is null
+     from public.leads where phone = '9811100093'),
+  'and critically: the research data from that re-import never reached the existing lead — the bug this section exists to pin down');
+
+select public.zz_expect(
+  (select updated = 1 and not_found = 0 from public.admin_backfill_lead_research(
+    '[{"phone":"9811100093",
+       "website":"http://legacy-cafe.test/",
+       "observed_opportunity":"Website returns error HTTP 404",
+       "website_issues":"Page returns 404"}]'::jsonb)),
+  'admin_backfill_lead_research() is the fix: it reports exactly one lead updated');
+
+select public.zz_expect(
+  (select website = 'http://legacy-cafe.test/'
+     and observed_opportunity = 'Website returns error HTTP 404'
+     and website_issues = 'Page returns 404'
+     and business_type = 'Cafe'
+     from public.leads where phone = '9811100093'),
+  'the backfill actually attached the research fields, and left business_type (and everything else) alone');
+
+-- Safety: a plain lead CSV with no audit columns at all must cost this
+-- function nothing, not a no-op write to every row it touches.
+select public.zz_expect(
+  (select updated = 0 and not_found = 0 from public.admin_backfill_lead_research(
+    '[{"phone":"9811100093","full_name":"Legacy Lead"}]'::jsonb)),
+  'a row carrying none of the four research fields is skipped entirely, not treated as an empty update');
+
+-- A soft-deleted lead is not a live lead to attach research data to.
+select public.admin_archive_lead((select id from public.leads where phone = '9811100093'));
+select public.zz_expect(
+  (select updated = 0 and not_found = 1 from public.admin_backfill_lead_research(
+    '[{"phone":"9811100093","website_issues":"should not land"}]'::jsonb)),
+  'an archived lead is reported not found, not silently updated');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000c1"}', true);
+select public.zz_expect_error(
+  $q$select * from public.admin_backfill_lead_research(
+    '[{"phone":"9811100095","website_issues":"nope"}]'::jsonb)$q$,
+  'a telecaller cannot backfill research data onto any lead');
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1"}', true);
+
 
 -- ===========================================================================
 select public.zz_section('6. Round-robin distribution');
