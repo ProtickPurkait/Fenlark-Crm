@@ -435,6 +435,10 @@ export interface Database {
           skipped_invalid: number;
         }[];
       };
+      admin_backfill_lead_research: {
+        Args: { p_rows: Json };
+        Returns: { updated: number; not_found: number }[];
+      };
       admin_assign_leads: {
         Args: { p_lead_ids: string[]; p_user_id: string | null };
         Returns: number;

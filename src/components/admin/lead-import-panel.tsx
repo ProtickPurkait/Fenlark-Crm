@@ -16,6 +16,14 @@ interface ImportResult {
   inserted: number;
   skipped_duplicate: number;
   skipped_invalid: number;
+  /**
+   * How many already-existing leads (the ones counted in skipped_duplicate,
+   * typically) had website/observed_opportunity/website_issues/
+   * alternate_phone attached or refreshed by admin_backfill_lead_research()
+   * — see runImport() below. Undefined on the manual "Add one lead" path,
+   * which never calls that RPC (it collects none of those fields).
+   */
+  backfilled?: number;
 }
 
 export function LeadImportPanel({
@@ -133,10 +141,9 @@ function CsvImport({ onImported }: { onImported: () => void }) {
       p_source: "csv",
     });
 
-    inFlight.current = false;
-    setImporting(false);
-
     if (rpcError) {
+      inFlight.current = false;
+      setImporting(false);
       setError(
         rpcError.message.includes("forbidden")
           ? "Your account no longer has admin rights."
@@ -145,7 +152,38 @@ function CsvImport({ onImported }: { onImported: () => void }) {
       return;
     }
 
-    setResult(data?.[0] ?? null);
+    // admin_import_leads() only ever inserts — a business already in the
+    // pipeline is correctly skipped as a duplicate, which also means a
+    // freshly re-researched website/observed_opportunity/website_issues (or
+    // a newly found alternate_phone) has nowhere to go via that path alone.
+    // This is the only thing that updates those four fields on a lead that
+    // already exists, so it always runs, on every row — not just the ones
+    // that turned out to be duplicates (a row that was just inserted above
+    // already has these values, so re-setting them here is a harmless
+    // no-op), and not just when the file obviously looks like a research
+    // sheet (an ordinary CSV with none of these columns costs this call
+    // nothing — see admin_backfill_lead_research()'s own `src` filter).
+    const { data: backfillData, error: backfillError } = await supabase.rpc(
+      "admin_backfill_lead_research",
+      { p_rows: parsed.rows },
+    );
+
+    inFlight.current = false;
+    setImporting(false);
+
+    if (backfillError) {
+      // The insert above already committed — surface this as a partial
+      // failure rather than losing the insert result entirely.
+      setError(
+        `${data?.[0]?.inserted ?? 0} lead(s) imported, but refreshing research ` +
+          `data on existing leads failed: ${backfillError.message}`,
+      );
+    }
+
+    setResult({
+      ...(data?.[0] ?? { inserted: 0, skipped_duplicate: 0, skipped_invalid: 0 }),
+      backfilled: backfillData?.[0]?.updated ?? 0,
+    });
     setParsed(null);
     setFileName(null);
     if (fileInput.current) fileInput.current.value = "";
@@ -590,11 +628,17 @@ function ResultBanner({
 }) {
   if (!result) return null;
 
-  const nothingHappened = result.inserted === 0;
+  // Backfilling an existing lead's research fields is real progress even
+  // when inserted is 0 (every row in the file already existed) — the amber
+  // "nothing happened" styling below would be actively misleading for a
+  // 782-duplicate, 782-backfilled run.
+  const nothingHappened = result.inserted === 0 && (result.backfilled ?? 0) === 0;
   const parts = [
     `${result.inserted} imported`,
     result.skipped_duplicate > 0 && `${result.skipped_duplicate} duplicate skipped`,
     result.skipped_invalid > 0 && `${result.skipped_invalid} invalid skipped`,
+    !!result.backfilled && result.backfilled > 0 &&
+      `${result.backfilled} existing lead${result.backfilled === 1 ? "" : "s"} refreshed with research data`,
   ].filter(Boolean);
 
   return (
