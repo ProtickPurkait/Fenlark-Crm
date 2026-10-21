@@ -245,7 +245,11 @@ function CsvImport({ onImported }: { onImported: () => void }) {
           <span className="text-foreground/70">business name</span>,{" "}
           <span className="text-foreground/70">business contact</span>,{" "}
           business category and business address columns.
-          Name and contact are required; category and address are optional.
+          Name and contact are required; everything else is optional,
+          including <span className="text-foreground/70">website</span>,{" "}
+          <span className="text-foreground/70">observed opportunity</span> and{" "}
+          <span className="text-foreground/70">website issues</span> columns
+          from a website-audit sheet, if the file has them.
           Common variants (&ldquo;Full Name&rdquo;, &ldquo;Mobile&rdquo;,
           &ldquo;Type&rdquo;) are recognised automatically.
         </p>
@@ -301,6 +305,21 @@ function CsvImport({ onImported }: { onImported: () => void }) {
                     {inFileDuplicates === 1 ? "" : "s"} inside this file
                   </span>{" "}
                   — only the first of each will be kept.
+                </li>
+              )}
+              {parsed.multiPhone.length > 0 && (
+                <li>
+                  <span className="text-[hsl(var(--neon-amber))]">
+                    {parsed.multiPhone.length} row
+                    {parsed.multiPhone.length === 1 ? "" : "s"} had more than
+                    one phone number
+                  </span>{" "}
+                  (line
+                  {parsed.multiPhone.length === 1 ? " " : "s "}
+                  {parsed.multiPhone.slice(0, 6).map((m) => m.line).join(", ")}
+                  {parsed.multiPhone.length > 6 ? "…" : ""}) — the first
+                  number is used to dial and dedupe; the rest are kept as an
+                  alternate number on the lead.
                 </li>
               )}
             </ul>

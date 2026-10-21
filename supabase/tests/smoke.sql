@@ -429,6 +429,45 @@ select public.zz_expect(
       {"full_name":"Too Short","phone":"12"}]'::jsonb)) = 3,
   'rows missing a name or carrying an unusable phone are reported as invalid');
 
+-- Migration 2700: the website-audit fields a CSV row carries alongside the
+-- four original ones.
+select public.admin_import_leads(
+  '[{"full_name":"Audit Lead","phone":"9811100098",
+     "website":"http://example-cafe.test/",
+     "observed_opportunity":"Website returns error HTTP 404",
+     "website_issues":"Page returns 404",
+     "alternate_phone":"9811100097"}]'::jsonb);
+
+select public.zz_expect(
+  (select website = 'http://example-cafe.test/'
+     and observed_opportunity = 'Website returns error HTTP 404'
+     and website_issues = 'Page returns 404'
+     and alternate_phone = '9811100097'
+     from public.leads where phone = '9811100098'),
+  'website, observed_opportunity, website_issues and alternate_phone all round-trip through admin_import_leads');
+
+-- A CSV without these columns at all (every import before migration 2700,
+-- and every import that still won't have them) must keep working exactly as
+-- it did — the new fields are additive, not required.
+select public.admin_import_leads(
+  '[{"full_name":"Plain Lead","phone":"9811100096"}]'::jsonb);
+
+select public.zz_expect(
+  (select website is null and observed_opportunity is null
+     and website_issues is null and alternate_phone is null
+     from public.leads where phone = '9811100096'),
+  'a row with none of the website-audit fields imports cleanly with them left null');
+
+-- alternate_phone is informational only — it must never collide with, or be
+-- checked against, phone_normalized's uniqueness. Importing a lead whose
+-- alternate_phone equals another lead's primary phone must not be treated
+-- as a duplicate of anything.
+select public.zz_expect(
+  (select inserted from public.admin_import_leads(
+    '[{"full_name":"Alt Collision Lead","phone":"9811100095",
+       "alternate_phone":"9811100098"}]'::jsonb)) = 1,
+  'alternate_phone matching another lead''s primary phone is not a duplicate conflict');
+
 
 -- ===========================================================================
 select public.zz_section('6. Round-robin distribution');

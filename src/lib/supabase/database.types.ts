@@ -191,6 +191,10 @@ export interface Database {
           business_type: string | null;
           address: string | null;
           notes: string | null;
+          website: string | null;
+          observed_opportunity: string | null;
+          website_issues: string | null;
+          alternate_phone: string | null;
           source: LeadSource;
           source_meta: Json;
           status: LeadStatus;
@@ -215,6 +219,10 @@ export interface Database {
           business_type?: string | null;
           address?: string | null;
           notes?: string | null;
+          website?: string | null;
+          observed_opportunity?: string | null;
+          website_issues?: string | null;
+          alternate_phone?: string | null;
           source?: LeadSource;
           source_meta?: Json;
           status?: LeadStatus;
@@ -229,6 +237,10 @@ export interface Database {
           business_type?: string | null;
           address?: string | null;
           notes?: string | null;
+          website?: string | null;
+          observed_opportunity?: string | null;
+          website_issues?: string | null;
+          alternate_phone?: string | null;
           status?: LeadStatus;
           scheduled_at?: string | null;
           last_remark?: string | null;

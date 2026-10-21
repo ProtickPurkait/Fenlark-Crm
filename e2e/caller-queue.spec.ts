@@ -59,4 +59,49 @@ test.describe("telecaller queue", () => {
     await expect(page.getByText("No leads match this filter")).toBeVisible();
     await expect(page.getByText("Your queue is clear")).toHaveCount(0);
   });
+
+  test("the disposition drawer surfaces website-audit findings, the Maps link and the alternate number", async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await signIn(page);
+
+    // Lead 1 is the one fixture carrying the website-audit fields (migration
+    // 2700) and a second phone number — see stub-supabase.mjs.
+    await page.getByText("Lead 1", { exact: true }).click();
+
+    await expect(page.getByText("http://example-cafe.test/")).toBeVisible();
+    await expect(page.getByText("Website returns error HTTP 404")).toBeVisible();
+    await expect(page.getByText("Page returns 404")).toBeVisible();
+
+    // The alternate number is offered, not silently dropped — see
+    // splitPhoneNumbers() in csv.ts, which is what produces it on import.
+    await expect(page.getByText("9800000001")).toBeVisible();
+
+    // The Maps link opens a real new tab/popup, not a same-tab navigation —
+    // losing the queue behind it would be worse than not having the link.
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.getByRole("button", { name: "Google Maps" }).click(),
+    ]);
+    await expect(popup).toHaveURL(/^https:\/\/www\.google\.com\/maps\/search\//);
+    await popup.close();
+
+    // Copy actually reaches the clipboard, not just flips the button's icon.
+    await page.getByRole("button", { name: "Copy number" }).click();
+    await expect(page.getByText("Copied")).toBeVisible();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toBe("9810000000");
+  });
+
+  test("a lead outside the website-audit pass shows no website block at all", async ({ page }) => {
+    await signIn(page);
+
+    // Lead 2 has none of the new fields set (null, not "checked and
+    // empty") — the drawer must not claim "no website found" for a lead
+    // that was never part of that research pass.
+    await page.getByText("Lead 2", { exact: true }).click();
+    await expect(page.getByText("No website found")).toHaveCount(0);
+    await expect(page.getByText("Also try")).toHaveCount(0);
+  });
 });
