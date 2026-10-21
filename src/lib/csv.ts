@@ -4,6 +4,8 @@
 // only tricky parts (quoted fields containing commas or newlines, and the ""
 // escape for a literal quote) are ~30 lines. No dependency, no bundle cost.
 
+import { normalizePhone } from "@/lib/phone";
+
 /**
  * Serializes rows into RFC-4180 CSV text, quoting only where needed and
  * doubling embedded quotes. Leads with a UTF-8 BOM so Excel — which
@@ -88,9 +90,12 @@ export function parseCsv(text: string): string[][] {
 /**
  * Column aliases accepted in an uploaded header row, normalised to our keys.
  *
- * Deliberately exactly four fields — business name, contact, category,
- * address. Every lead here is a business, not an individual, so that's the
- * whole shape: no email, city, company or notes columns.
+ * Originally exactly four fields — business name, contact, category,
+ * address — because every lead here is a business, not an individual, with
+ * no email/city/company/notes columns. Extended for the website-audit
+ * research pipeline: each lead already comes with a cold-call angle baked
+ * in (what's wrong with their current web presence), so that has to survive
+ * the import rather than being dropped on the floor.
  */
 const HEADER_ALIASES: Record<string, string> = {
   name: "full_name",
@@ -125,6 +130,24 @@ const HEADER_ALIASES: Record<string, string> = {
   "business address": "address",
   "street address": "address",
   location: "address",
+
+  website: "website",
+  "website url": "website",
+  "website link": "website",
+  "business website": "website",
+  url: "website",
+
+  observed_opportunity: "observed_opportunity",
+  "observed opportunity": "observed_opportunity",
+  opportunity: "observed_opportunity",
+  "sales opportunity": "observed_opportunity",
+  "sales angle": "observed_opportunity",
+
+  website_issues: "website_issues",
+  "website issues": "website_issues",
+  "website issue": "website_issues",
+  issues: "website_issues",
+  "technical issues": "website_issues",
 };
 
 export const IMPORT_FIELDS = [
@@ -132,10 +155,35 @@ export const IMPORT_FIELDS = [
   "phone",
   "business_type",
   "address",
+  "website",
+  "observed_opportunity",
+  "website_issues",
 ] as const;
 
 export type ImportField = (typeof IMPORT_FIELDS)[number];
-export type ImportRow = Partial<Record<ImportField, string>>;
+export type ImportRow = Partial<Record<ImportField, string>> & {
+  /**
+   * A second phone number from the same cell as `phone` (see
+   * splitPhoneNumbers below). Not header-mapped — there is no separate
+   * "alternate phone" column in the source sheet — so it never appears in
+   * HEADER_ALIASES/IMPORT_FIELDS; parseLeadCsv fills it in by splitting the
+   * phone cell itself.
+   */
+  alternate_phone?: string;
+};
+
+/**
+ * A `website` cell carries one of three things in practice: a real URL, a
+ * blank (not yet checked), or one of a handful of stock phrases the research
+ * process uses for "checked, there isn't one". Storing that phrase as if it
+ * were a website is worse than storing nothing — the UI already has a
+ * dedicated "no website found" state (see call-disposition-drawer.tsx), and
+ * observed_opportunity/website_issues carry the actual explanation.
+ */
+const NO_WEBSITE_SENTINELS = new Set([
+  "none found", "not found", "none", "n/a", "na",
+  "no website", "no website found", "-", "n.a.",
+]);
 
 export interface CsvParseResult {
   rows: ImportRow[];
@@ -145,6 +193,42 @@ export interface CsvParseResult {
   /** Rows dropped before reaching the server, with the reason. */
   rejected: { line: number; reason: string }[];
   matchedHeaders: Partial<Record<ImportField, string>>;
+  /** Rows whose phone cell held more than one number (the common case is a
+   *  landline alongside a mobile, or two owners' numbers). Shown so the
+   *  admin can see which number became primary at a glance, rather than
+   *  discovering it only by opening the lead later. */
+  multiPhone: { line: number; raw: string; primary: string; alternates: string[] }[];
+}
+
+/**
+ * Splits a phone cell that may hold more than one number. The overwhelming
+ * majority of rows have exactly one — this is a no-op for those, returning
+ * the cell untouched as `primary` with no alternates.
+ *
+ * When there's more than one, the first number plausible enough to pass the
+ * same length check the database applies (normalize_phone(...) 7-15 digits —
+ * see leads_phone_plausible in 0200_tables.sql) becomes `primary`: that's
+ * the one that drives dialling, dedup and the phone_normalized unique index,
+ * so it must be something the database will actually accept. The rest ride
+ * along as `alternates` — informational only, never deduped or validated as
+ * strictly, surfaced to the telecaller as "also try this number" rather than
+ * silently discarded.
+ */
+function splitPhoneNumbers(raw: string): { primary: string; alternates: string[] } {
+  const parts = raw
+    .split(/[;,/]| and | or /i)
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
+
+  if (parts.length <= 1) return { primary: raw.trim(), alternates: [] };
+
+  const plausible = parts.filter((p) => {
+    const n = normalizePhone(p).length;
+    return n >= 7 && n <= 15;
+  });
+  const ordered = plausible.length > 0 ? plausible : parts;
+  const [primary, ...alternates] = ordered;
+  return { primary, alternates };
 }
 
 /**
@@ -158,7 +242,7 @@ export function parseLeadCsv(text: string): CsvParseResult {
   const table = parseCsv(text).filter((r) => r.some((c) => c.trim() !== ""));
 
   if (table.length === 0) {
-    return { rows: [], unmappedHeaders: [], rejected: [], matchedHeaders: {} };
+    return { rows: [], unmappedHeaders: [], rejected: [], matchedHeaders: {}, multiPhone: [] };
   }
 
   const header = table[0].map((h) => h.trim());
@@ -185,6 +269,7 @@ export function parseLeadCsv(text: string): CsvParseResult {
 
   const rows: ImportRow[] = [];
   const rejected: { line: number; reason: string }[] = [];
+  const multiPhone: { line: number; raw: string; primary: string; alternates: string[] }[] = [];
 
   for (let r = 1; r < table.length; r++) {
     const cells = table[r];
@@ -205,8 +290,21 @@ export function parseLeadCsv(text: string): CsvParseResult {
       rejected.push({ line, reason: "no phone" });
       continue;
     }
+
+    const rawPhone = row.phone;
+    const { primary, alternates } = splitPhoneNumbers(rawPhone);
+    if (alternates.length > 0) {
+      row.phone = primary;
+      row.alternate_phone = alternates.join(", ");
+      multiPhone.push({ line, raw: rawPhone, primary, alternates });
+    }
+
+    if (row.website && NO_WEBSITE_SENTINELS.has(row.website.toLowerCase().trim())) {
+      delete row.website;
+    }
+
     rows.push(row);
   }
 
-  return { rows, unmappedHeaders, rejected, matchedHeaders };
+  return { rows, unmappedHeaders, rejected, matchedHeaders, multiPhone };
 }

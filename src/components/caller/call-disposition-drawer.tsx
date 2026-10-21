@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
+  Copy,
   Loader2,
+  MapPin,
   MessageCircle,
   Phone,
   PhoneOff,
@@ -133,6 +135,10 @@ export function CallDispositionDrawer({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Which phone number was last copied, so its button alone can flip to a
+  // checkmark for 2s — matches the one existing clipboard pattern in this
+  // codebase (telecallers-client.tsx's copyCredentials).
+  const [copiedPhone, setCopiedPhone] = useState<"primary" | "alternate" | null>(null);
   // Seconds measured for the call just made, pre-filled into the form. Null
   // until a tracked call completes, so a disposition logged without dialling
   // from the app doesn't claim a fabricated duration.
@@ -140,6 +146,10 @@ export function CallDispositionDrawer({
   // The session the duration above belongs to, kept so an edited value can be
   // written back against the right row when the disposition is saved.
   const [callSessionId, setCallSessionId] = useState<string | null>(null);
+  // Device-measured durations are not editable — end_call_session() ignores a
+  // manual correction against one anyway, so the input is hidden entirely
+  // rather than shown and silently failing to save an edit.
+  const [callSource, setCallSource] = useState<"app_estimate" | "device" | null>(null);
   const autoSecondsRef = useRef<number | null>(null);
 
   const {
@@ -149,9 +159,10 @@ export function CallDispositionDrawer({
     endCall,
     correctDuration,
   } = useCallSession({
-    onCallEnded: ({ sessionId, durationSeconds }) => {
+    onCallEnded: ({ sessionId, durationSeconds, source }) => {
       setCallSessionId(sessionId);
       setCallSeconds(durationSeconds);
+      setCallSource(source);
       autoSecondsRef.current = durationSeconds;
     },
   });
@@ -175,6 +186,7 @@ export function CallDispositionDrawer({
     // to the next lead would attribute one call's time to another.
     setCallSeconds(null);
     setCallSessionId(null);
+    setCallSource(null);
     autoSecondsRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead?.id]);
@@ -184,6 +196,35 @@ export function CallDispositionDrawer({
   const requiresSchedule = status === "rescheduled";
   // Feeds the input's `min`, so the native picker will not offer a past slot.
   const nowLocal = toDatetimeLocal(new Date().toISOString());
+
+  // Google Maps search, not a stored profile URL — the source data has no
+  // such column (it was researched from the business's Maps listing, not
+  // exported as a link), but name + address reliably lands on the right
+  // listing in one tap, which is what "see their Google Business Profile"
+  // actually needs.
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    [lead.full_name, lead.address].filter(Boolean).join(" "),
+  )}`;
+
+  // Source data always carries a scheme (http:// or https://), but this
+  // guards against a future import that drops it — a bare domain passed to
+  // window.open() resolves relative to the current page instead of opening
+  // the site, which fails silently rather than with an obvious error.
+  const websiteHref =
+    lead.website && /^https?:\/\//i.test(lead.website) ? lead.website : `https://${lead.website}`;
+
+  async function copyPhone(which: "primary" | "alternate", number: string) {
+    try {
+      await navigator.clipboard.writeText(number);
+      setCopiedPhone(which);
+      setTimeout(() => setCopiedPhone((p) => (p === which ? null : p)), 2000);
+    } catch {
+      // Clipboard access can be denied (permissions, insecure context); the
+      // telecaller still has the number visible to read off by hand, so this
+      // fails silently rather than surfacing an error for a non-essential
+      // convenience action.
+    }
+  }
 
   function applyQuickRemark(preset: (typeof QUICK_REMARKS)[number]) {
     // Append rather than overwrite: a caller who has already typed a detail
@@ -261,11 +302,14 @@ export function CallDispositionDrawer({
 
     // Persist a hand-edited duration. Only when it actually differs from what
     // was measured — an untouched value is already stored, and rewriting it
-    // would relabel an automatic measurement as a manual one.
+    // would relabel an automatic measurement as a manual one. Never for a
+    // device-measured call: the UI never offers an edit for one (see below),
+    // and the backend would ignore the correction anyway.
     if (
       callSessionId &&
       callSeconds !== null &&
-      callSeconds !== autoSecondsRef.current
+      callSeconds !== autoSecondsRef.current &&
+      callSource === "app_estimate"
     ) {
       await correctDuration(callSessionId, callSeconds);
     }
@@ -308,6 +352,64 @@ export function CallDispositionDrawer({
               </SheetDescription>
             </SheetHeader>
 
+            {/* Phone actions and the Maps jump: things reached for before or
+                during the call, not after, so they sit right under the
+                number rather than buried lower in the sheet. */}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => copyPhone("primary", lead.phone)}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground"
+              >
+                {copiedPhone === "primary" ? (
+                  <Check className="h-3 w-3 text-[hsl(var(--neon-emerald))]" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+                {copiedPhone === "primary" ? "Copied" : "Copy number"}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(mapsUrl, "_blank", "noopener,noreferrer")}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <MapPin className="h-3 w-3" />
+                Google Maps
+              </button>
+            </div>
+
+            {/* Rare — 5 of ~780 leads in the source research sheet had two
+                numbers in one cell. The first became lead.phone, the one
+                everything else (dialling, dedup) keys on; this is the other
+                one, offered rather than silently discarded. */}
+            {lead.alternate_phone && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>Also try</span>
+                <span className="font-mono text-foreground/80">{lead.alternate_phone}</span>
+                <button
+                  type="button"
+                  onClick={() => copyPhone("alternate", lead.alternate_phone!)}
+                  aria-label="Copy alternate number"
+                  className="rounded-md p-1 ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {copiedPhone === "alternate" ? (
+                    <Check className="h-3 w-3 text-[hsl(var(--neon-emerald))]" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={!!activeCall}
+                  onClick={() => startCall(lead.id, lead.alternate_phone!)}
+                  aria-label="Call alternate number"
+                  className="rounded-md p-1 ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                >
+                  <Phone className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
             {/* Always shown, labeled, with an explicit fallback — this is
                 what the telecaller needs to know before dialling, and a
                 silently-hidden field when the data is missing reads as "not
@@ -337,6 +439,54 @@ export function CallDispositionDrawer({
                 </p>
               </div>
             </motion.div>
+
+            {/* Website-audit findings — what's wrong with the business's web
+                presence is the actual reason to call. Gated on any of the
+                three being present, not rendered unconditionally like
+                category/address above: a lead outside that research pass
+                was never checked at all, and claiming "no website found"
+                for one would overstate what's actually known. */}
+            {(lead.website || lead.observed_opportunity || lead.website_issues) && (
+              <motion.div
+                variants={staggerItem}
+                className="mt-3 space-y-2.5 rounded-lg border border-border bg-muted p-3"
+              >
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <p className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Website
+                  </p>
+                  {lead.website ? (
+                    <button
+                      type="button"
+                      onClick={() => window.open(websiteHref, "_blank", "noopener,noreferrer")}
+                      className="min-w-0 truncate text-sm font-medium text-[hsl(var(--neon-blue))] hover:underline"
+                    >
+                      {lead.website}
+                    </button>
+                  ) : (
+                    <span className="text-sm font-medium text-muted-foreground/70">
+                      No website found
+                    </span>
+                  )}
+                </div>
+                {lead.observed_opportunity && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Observed opportunity
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium">{lead.observed_opportunity}</p>
+                  </div>
+                )}
+                {lead.website_issues && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Website issues
+                    </p>
+                    <p className="mt-0.5 text-sm text-foreground/80">{lead.website_issues}</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
 
             {/* SLA countdown — only while the lead is still untouched, since
                 that is the only state the recycling engine reclaims from. */}
@@ -504,27 +654,37 @@ export function CallDispositionDrawer({
                     <Phone className="h-4 w-4 shrink-0 text-[hsl(var(--neon-emerald))]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-muted-foreground">
-                        Call duration recorded
+                        {callSource === "device"
+                          ? "Call duration — measured automatically"
+                          : "Call duration recorded"}
                       </p>
                       <p className="text-sm font-medium text-[hsl(var(--neon-emerald))]">
                         {formatDurationLabel(callSeconds)}
                       </p>
                     </div>
-                    {/* Editable: the measurement includes ringing time, so the
-                        telecaller gets the last word on what is recorded. */}
-                    <input
-                      type="number"
-                      min={0}
-                      max={14400}
-                      step={1}
-                      aria-label="Call duration in seconds"
-                      value={callSeconds}
-                      onChange={(e) =>
-                        setCallSeconds(Math.max(0, Number(e.target.value) || 0))
-                      }
-                      className="h-9 w-20 shrink-0 rounded-md border border-border bg-card px-2 text-center font-mono text-sm [color-scheme:light]"
-                    />
-                    <span className="shrink-0 text-xs text-muted-foreground">sec</span>
+                    {callSource === "app_estimate" ? (
+                      // Editable: the measurement includes ringing time, so
+                      // the telecaller gets the last word on what is
+                      // recorded. Device-measured calls skip this entirely —
+                      // see callSource above.
+                      <>
+                        <input
+                          type="number"
+                          min={0}
+                          max={14400}
+                          step={1}
+                          aria-label="Call duration in seconds"
+                          value={callSeconds}
+                          onChange={(e) =>
+                            setCallSeconds(Math.max(0, Number(e.target.value) || 0))
+                          }
+                          className="h-9 w-20 shrink-0 rounded-md border border-border bg-card px-2 text-center font-mono text-sm [color-scheme:light]"
+                        />
+                        <span className="shrink-0 text-xs text-muted-foreground">sec</span>
+                      </>
+                    ) : (
+                      <Check className="h-4 w-4 shrink-0 text-[hsl(var(--neon-emerald))]" />
+                    )}
                   </div>
                 </motion.div>
               )}

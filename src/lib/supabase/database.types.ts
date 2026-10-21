@@ -46,7 +46,7 @@ export type AuditEvent =
 
 /** Where a call's duration came from. 'provider' is reserved for a future
  *  cloud-telephony integration writing exact values into the same table. */
-export type CallDurationSource = "app_estimate" | "manual" | "provider";
+export type CallDurationSource = "app_estimate" | "manual" | "device" | "provider";
 
 /** 'superseded' = caller started another call; 'sweep' = the app never
  *  reported back and pg_cron closed it (duration is null in that case). */
@@ -191,6 +191,10 @@ export interface Database {
           business_type: string | null;
           address: string | null;
           notes: string | null;
+          website: string | null;
+          observed_opportunity: string | null;
+          website_issues: string | null;
+          alternate_phone: string | null;
           source: LeadSource;
           source_meta: Json;
           status: LeadStatus;
@@ -215,6 +219,10 @@ export interface Database {
           business_type?: string | null;
           address?: string | null;
           notes?: string | null;
+          website?: string | null;
+          observed_opportunity?: string | null;
+          website_issues?: string | null;
+          alternate_phone?: string | null;
           source?: LeadSource;
           source_meta?: Json;
           status?: LeadStatus;
@@ -229,6 +237,10 @@ export interface Database {
           business_type?: string | null;
           address?: string | null;
           notes?: string | null;
+          website?: string | null;
+          observed_opportunity?: string | null;
+          website_issues?: string | null;
+          alternate_phone?: string | null;
           status?: LeadStatus;
           scheduled_at?: string | null;
           last_remark?: string | null;

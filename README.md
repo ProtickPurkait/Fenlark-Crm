@@ -710,3 +710,88 @@ update public.leads set deleted_at = now()
 delete from auth.users where email = 'calltest.probe@fenlark.test';
 commit;
 ```
+
+---
+
+## Native Android app (call tracking)
+
+`call_sessions.duration_source = 'app_estimate'` (the default) is a guess: how
+long the app was backgrounded while the phone's own dialer had focus, which
+runs long because it includes ring time and lets a telecaller "correct" it to
+anything before saving. A native Android shell closes that gap for calls
+placed from it — `duration_source = 'device'` comes from Android's own
+telephony call state, which nothing in the CRM can influence, and the
+disposition drawer does not offer an editable field for one at all
+(`src/components/caller/call-disposition-drawer.tsx`).
+
+**This has not been built, installed, or run on a device.** Everything below
+compiled/typechecked/passed the smoke suite from inside this repo, which is as
+far as it's been verified — there is no Android SDK, emulator, or phone in
+that environment. Treat `android/app/src/main/java/llp/fenlark/trace/
+CallTrackerPlugin.java` in particular as a first draft against Android's
+documented APIs, not as tested code, and expect a round of fixes once someone
+actually installs it.
+
+### What it does and does not measure
+
+`CallTrackerPlugin` watches `TelephonyManager`'s call state and reports the
+span from **OFFHOOK** (the OS begins placing the call) to **IDLE** (the call
+is over) — a boundary the telecaller cannot touch, because it never reaches
+the CRM at all. It does **not** measure from the moment the other side
+actually answers: that needs `PRECISE_CALL_STATE`, which Android restricts to
+apps with carrier privileges or the default-dialer role, neither of which
+this plugin has. So a `device` duration is still ring-time-inclusive, same as
+the estimate it replaces — what changes is that it is now impossible to fake,
+not that it excludes ringing. Getting frame-accurate connected-time would mean
+this app becoming the phone's default dialer, a materially bigger project not
+attempted here.
+
+Call **recording** was explicitly asked for and explicitly deferred (see the
+PR/commit history around this feature) — Android has no public API for it
+since Android 10 on most devices (`VOICE_CALL` audio source is OS/OEM-blocked
+on modern Pixel/Samsung/Xiaomi), and Google Play won't list an app that
+records calls unless it's the default dialer. It would need its own phase,
+built and accepted as best-effort per device, not a guarantee.
+
+### How it's wired
+
+- `capacitor.config.ts` — remote-URL mode: the native `WebView` loads
+  `https://fenlark-crm.vercel.app` directly rather than bundling a local copy,
+  so the native shell and the browser PWA always run identical code with
+  nothing to keep in sync. Override with `CAPACITOR_SERVER_URL` for a local
+  dev build.
+- `android/` — the generated Gradle project (`npx cap add android`).
+  `CallTrackerPlugin.java` and the `READ_PHONE_STATE` permission are the only
+  hand-written parts; everything else is Capacitor's own scaffold.
+- `src/lib/native-call-tracker.ts` — the JS-side bridge
+  (`registerPlugin("CallTracker")`), plus `isNativeCallTrackerAvailable()` so
+  the rest of the app can tell native from web.
+- `src/lib/use-call-session.ts` — on native, requests the permission and
+  starts listening once on mount; if that succeeds, the existing
+  visibility-based auto-end stands down (native's `callEnded` event closes
+  the session instead) except for a 5-second backstop timer that falls back
+  to the web estimate if `callEnded` never arrives. If the permission is
+  denied or the plugin fails for any reason, none of this engages and the
+  hook behaves exactly as it does on the plain web PWA today.
+
+### Building it
+
+Needs the Android SDK and a JDK (17+; this repo was scaffolded with the
+system's OpenJDK 21) — neither is present in this container.
+
+```bash
+npx cap sync android      # after any change under src/ or capacitor.config.ts
+cd android
+./gradlew assembleDebug   # or open android/ in Android Studio and Run
+```
+
+The unsigned debug APK lands at
+`android/app/build/outputs/apk/debug/app-debug.apk`. Install it, launch the
+app, and it should prompt for the phone-state permission on first load (see
+`requestCallStatePermission()` in the plugin) — grant it, then place a call
+from the queue and confirm the disposition drawer shows "Call duration —
+measured automatically" with no editable field, instead of the usual editable
+estimate. If it still shows the editable estimate, the permission prompt or
+the plugin's listener registration is the first thing to check — `adb logcat`
+filtered to the app's package (`llp.fenlark.trace`) will show whether
+`startListening` ever ran.

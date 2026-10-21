@@ -33,7 +33,16 @@ const ALL_LEADS = Array.from({ length: TOTAL_LEADS }, (_, i) => ({
   city: "Kolkata",
   company: null,
   business_type: i % 3 === 0 ? "Cafe" : "Interior Decor",
-  address: null,
+  // Lead 1 carries the website-audit fields (migration 2700) and a second
+  // phone number, so the drawer's rendering of them has a fixture to assert
+  // against; every other lead stays null, covering the "never audited"
+  // case the drawer has to render differently (no "no website found" claim
+  // for a lead that was never checked — see call-disposition-drawer.tsx).
+  address: i === 0 ? "12 MG Road, Kolkata, West Bengal 700001" : null,
+  website: i === 0 ? "http://example-cafe.test/" : null,
+  observed_opportunity: i === 0 ? "Website returns error HTTP 404" : null,
+  website_issues: i === 0 ? "Page returns 404" : null,
+  alternate_phone: i === 0 ? "9800000001" : null,
   status: STATUSES[i % STATUSES.length],
   assigned_to: "00000000-0000-0000-0000-0000000000c1",
   assigned_at: new Date().toISOString(),
